@@ -189,6 +189,12 @@ function wrapSockWithReply(sock, originalMsg, options = {}) {
           signal?.throwIfAborted();
           const levix = opts.levix || null;
           delete opts.levix;
+          const receiptRequested = opts.receipt === true;
+          delete opts.receipt;
+          const activeGuard =
+            reaction && receiptRequested && options.receiptGuard
+              ? options.receiptGuard
+              : options.deliveryGuard;
 
           const requested = canonicalJid(jid) || source;
           const mutation = content?.edit || content?.delete || null;
@@ -292,10 +298,10 @@ function wrapSockWithReply(sock, originalMsg, options = {}) {
           signal?.throwIfAborted();
           state.attempted += 1;
           if (reaction) {
-            if (options.deliveryGuard?.refresh) await options.deliveryGuard.refresh();
+            if (activeGuard?.refresh) await activeGuard.refresh();
             const sent = await botSender.sendBotMessage(target, plan.destination, outgoing, {
               signal,
-              deliveryGuard: options.deliveryGuard,
+              deliveryGuard: activeGuard,
               replyTo: sameChat && plan.quote !== false ? quoted || replyAnchor : null,
               quoted: sameChat && plan.quote !== false ? quoted || replyAnchor : null,
               quote: sameChat && plan.quote !== false,

@@ -156,6 +156,8 @@ export function withOutboundSavers(sock) {
     // Assign the id before relay. rc14 can emit the local echo while
     // sendMessage is still awaiting, and the content cache is written only
     // after the promise resolves. A refused delivery guard never reaches here.
+    // A full id store refuses this id and holds linked intake closed for one
+    // outbound TTL after the latest refusal. The send still proceeds.
     if (typeof wireOptions.messageId !== "string" || !wireOptions.messageId) {
       wireOptions.messageId = localMessageId(sock.user?.id);
     }

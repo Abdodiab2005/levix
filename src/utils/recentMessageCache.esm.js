@@ -43,19 +43,18 @@ let maxEntryBytes = DEFAULT_MAX_ENTRY_BYTES;
 // Ids only, and not the content cache. The default count is far above the
 // 500-message body cap. An id that is still inside its TTL is never evicted:
 // the reaction window can outlive a content-cache eviction. A full store
-// fails closed instead of forgetting a young id.
+// refuses the new id. Linked intake stays closed until one full TTL after the
+// latest refusal. Expiry of older ids does not reopen it.
 const DEFAULT_OUTBOUND_MAX_ITEMS = 100_000;
 const outboundIds = new Map(); // id -> expiresAt
 let outboundTtlMs = DEFAULT_TTL_MS;
 let outboundMaxItems = DEFAULT_OUTBOUND_MAX_ITEMS;
-let outboundSaturated = false;
+let saturatedUntil = 0;
 
 function gcOutbound(now = Date.now()) {
   for (const [id, expiresAt] of outboundIds) {
     if (expiresAt <= now) outboundIds.delete(id);
   }
-  if (outboundIds.size > outboundMaxItems) outboundSaturated = true;
-  else if (outboundIds.size < outboundMaxItems) outboundSaturated = false;
 }
 
 function makeCacheKey(chatJid, id) {
@@ -118,7 +117,7 @@ export function clearRecentMessages() {
   recent.clear();
   totalBytes = 0;
   outboundIds.clear();
-  outboundSaturated = false;
+  saturatedUntil = 0;
   return accountEpoch;
 }
 
@@ -138,7 +137,7 @@ export function rememberOutboundId(id, now = Date.now()) {
     return true;
   }
   if (outboundIds.size >= outboundMaxItems) {
-    outboundSaturated = true;
+    saturatedUntil = Math.max(saturatedUntil, now + outboundTtlMs);
     return false;
   }
   outboundIds.set(id, now + outboundTtlMs);
@@ -151,20 +150,23 @@ export function isOutboundId(id, now = Date.now()) {
   if (expiresAt == null) return false;
   if (expiresAt <= now) {
     outboundIds.delete(id);
-    if (outboundIds.size < outboundMaxItems) outboundSaturated = false;
     return false;
   }
   return true;
 }
 
-/** True once a young id was refused because the id store was full. */
-export function outboundIdsSaturated() {
-  return outboundSaturated;
+/**
+ * True while linked-account intake must stay closed.
+ * `now` defaults to the wall clock. A caller with its own clock passes that.
+ * The window ends one outbound TTL after the latest refused id.
+ */
+export function outboundIdsSaturated(now = Date.now()) {
+  return now < saturatedUntil;
 }
 
 export function clearOutboundIds() {
   outboundIds.clear();
-  outboundSaturated = false;
+  saturatedUntil = 0;
 }
 
 function normalizeEpochArg(candidate) {

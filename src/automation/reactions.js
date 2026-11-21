@@ -171,7 +171,7 @@ function messageKey(key, sock, enforce) {
   }
   const linked = fromMe || isLinkedActor(sock, author);
   if (enforce && linked) {
-    if (outboundIdsSaturated()) return null;
+    if (outboundIdsSaturated(enforce.now ?? Date.now())) return null;
     const stamp = enforce.timestampMs;
     if (enforce.inbound !== true || !Number.isSafeInteger(stamp) || stamp < enforce.connectionAt)
       return null;
@@ -349,12 +349,13 @@ export function createReactionIntake(
   function remember(msg) {
     if (!active || !linkedIdsFor(sock).length) return false;
     const stamp = numberOf(msg.messageTimestamp) * 1000;
+    const time = now();
     const key = messageKey(msg?.key, sock, {
       inbound: true,
       timestampMs: stamp,
       connectionAt,
+      now: time,
     });
-    const time = now();
     if (!key || !enabled(key.remoteJid)) return false;
     sweep();
     if (
@@ -459,13 +460,14 @@ export function createReactionIntake(
     const noted = typeof actorId === "string" ? provenance.get(actorId) : undefined;
     const inbound = noted === "notify";
     const timestampMs = numberOf(entry?.reaction?.senderTimestampMs);
+    const time = now();
     const actorKey = messageKey(entry?.reaction?.key, sock, {
       inbound,
       timestampMs,
       connectionAt,
+      now: time,
     });
     const emoji = entry?.reaction?.text ?? "";
-    const time = now();
     if (
       !originalKey ||
       !actorKey ||

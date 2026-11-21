@@ -14,6 +14,7 @@ import type {
   ReactionSenderRole,
   ReactionTransition,
 } from "../types";
+import { fill } from "./fill.ts";
 
 const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
 
@@ -1092,4 +1093,135 @@ export function reactionApiIssues(err: unknown): ReactionIssue[] {
       typeof (item as ReactionIssue).field === "string" &&
       typeof (item as ReactionIssue).code === "string",
   );
+}
+
+export function reactionOriginalTypeLabel(
+  t: (key: string) => string,
+  value: ReactionOriginalType,
+): string {
+  if (value === "text") return t("reactionTypeText");
+  if (value === "voice") return t("reactionTypeVoice");
+  if (value === "audio") return t("reactionTypeAudio");
+  if (value === "image") return t("reactionTypeImage");
+  if (value === "video") return t("reactionTypeVideo");
+  if (value === "document") return t("reactionTypeDocument");
+  return t("reactionTypeSticker");
+}
+
+export function previewRequesterPhrase(
+  t: (key: string) => string,
+  mode: ReactionSenderMode,
+  senderCount = 0,
+): string {
+  switch (mode) {
+    case "owner":
+      return t("reactionPreviewRequesterOwner");
+    case "owner_group_admin":
+      return t("reactionPreviewRequesterOwnerGroupAdmin");
+    case "group_admin":
+      return t("reactionPreviewRequesterGroupAdmin");
+    case "any":
+      return t("reactionPreviewRequesterAnyone");
+    case "selected":
+      return fill(t("reactionPreviewRequesterSelected"), { n: senderCount });
+    case "custom":
+      return t("reactionPreviewRequesterCustom");
+  }
+}
+
+export function previewTransitionsPhrase(
+  t: (key: string) => string,
+  transitions: readonly ReactionTransition[],
+  isSecondPerson: boolean,
+): string {
+  if (!transitions.length) {
+    return isSecondPerson ? t("reactionPreviewTransAddYou") : t("reactionPreviewTransAdd");
+  }
+  const phrases = transitions.map((item) => {
+    switch (item) {
+      case "add":
+        return isSecondPerson ? t("reactionPreviewTransAddYou") : t("reactionPreviewTransAdd");
+      case "change":
+        return isSecondPerson
+          ? t("reactionPreviewTransChangeYou")
+          : t("reactionPreviewTransChange");
+      default:
+        return isSecondPerson
+          ? t("reactionPreviewTransRemoveYou")
+          : t("reactionPreviewTransRemove");
+    }
+  });
+  if (phrases.length === 1) return phrases[0];
+  const joiner = t("reactionListJoin");
+  const orWord = t("reactionListOr");
+  if (phrases.length === 2) {
+    return `${phrases[0]}${orWord}${phrases[1]}`;
+  }
+  return `${phrases.slice(0, -1).join(joiner)}${orWord}${phrases[phrases.length - 1]}`;
+}
+
+export function previewDestinationPhrase(
+  t: (key: string) => string,
+  destination: ReactionDestinationMode,
+): string {
+  return destination === "owner_private"
+    ? t("reactionPreviewDestOwner")
+    : t("reactionPreviewDestSame");
+}
+
+export function previewTypesPhrase(
+  t: (key: string) => string,
+  originalTypes: readonly ReactionOriginalType[],
+  action: string,
+): string {
+  if (action !== "stt" && ORIGINAL_TYPES.every((type) => originalTypes.includes(type))) {
+    return t("reactionPreviewAllTypes");
+  }
+  const typesToFormat = action === "stt" ? (["voice"] as const) : originalTypes;
+  if (!typesToFormat.length) return t("reactionTypes");
+  return (
+    typesToFormat.map((item) => reactionOriginalTypeLabel(t, item)).join(t("reactionListJoin")) ||
+    t("reactionTypes")
+  );
+}
+
+export function previewActionPhrase(
+  t: (key: string) => string,
+  action: string,
+  prefix = "!",
+): string {
+  if (action === "stt") {
+    return t("reactionPreviewActionStt");
+  }
+  const commandToken = formatCommandToken(action, prefix);
+  if (commandToken) {
+    return fill(t("reactionPreviewActionCommand"), { command: commandToken });
+  }
+  return t("reactionPreviewActionUnset");
+}
+
+export function previewText(
+  t: (key: string) => string,
+  draft: ReactionDraft,
+  prefix = "!",
+): string {
+  const mode = resolveSenderMode(draft);
+  const isSecondPerson = mode === "owner";
+  const who = previewRequesterPhrase(t, mode, draft.senderIds.length);
+  const transitions = previewTransitionsPhrase(t, draft.transitions, isSecondPerson);
+  const emoji = draft.emoji || t("reactionPreviewEmoji");
+  const types = previewTypesPhrase(t, draft.originalTypes, draft.action);
+  const chat = draft.chatName.trim() || t("reactionPreviewChat");
+  const action = previewActionPhrase(t, draft.action, prefix);
+  const destination = previewDestinationPhrase(t, draft.destination);
+
+  return fill(t("reactionPreview"), {
+    who,
+    transitions,
+    emoji,
+    types,
+    chat,
+    action,
+    destination,
+  });
 }

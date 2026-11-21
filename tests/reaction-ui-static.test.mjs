@@ -181,9 +181,11 @@ section("PR-2b command picker, args, sender modes, linked switch, callout, and R
     "editor renders separate allowOthersOnLinkedMessages toggle",
     editor.includes('t("reactionAllowOthersOnLinked")'),
   );
+  ok("editor uses useDirtyForm", editor.includes("useDirtyForm"));
+  ok("editor has no FormActions in the body", !editor.includes("<FormActions"));
   ok(
-    "editor uses useDirtyForm and FormActions per R6",
-    editor.includes("useDirtyForm") && editor.includes("<FormActions"),
+    "footer has the submit button bound to form=reaction-rule-form",
+    /footer=\{[\s\S]*?<Button[^>]*type="submit"[^>]*form="reaction-rule-form"/.test(editor),
   );
   ok(
     "view renders single Callout when automation is off with enabled rules",

@@ -185,13 +185,13 @@ try {
     rememberOutboundId("mid", now);
     equal("a full id store rejects another young id", rememberOutboundId("new", now), false);
     equal("oldest young id is retained", isOutboundId("old", now), true);
-    equal("saturation fails closed", outboundIdsSaturated(), true);
+    equal("saturation fails closed", outboundIdsSaturated(now), true);
     clearOutboundIds();
     configureOutboundIds({ maxItems: 10, ttlMs: 1000 });
     rememberOutboundId("ttl", now);
     equal("id is live before the ttl", isOutboundId("ttl", now + 999), true);
     equal("id expires at the ttl", isOutboundId("ttl", now + 1000), false);
-    equal("expiry clears saturation", outboundIdsSaturated(), false);
+    equal("an id expiry does not saturate the store", outboundIdsSaturated(now + 1000), false);
     configureOutboundIds({ maxItems: 100_000, ttlMs: 60 * 60 * 1000 });
     clearOutboundIds();
     rememberOutboundId("gone");
@@ -422,11 +422,10 @@ try {
   section("a saturated id store rejects a linked reaction");
   {
     clearOutboundIds();
-    const now = Date.now();
     configureOutboundIds({ maxItems: 1, ttlMs: 60 * 60 * 1000 });
-    rememberOutboundId("held", now);
-    equal("overflow does not evict the held id", rememberOutboundId("overflow", now), false);
-    equal("overflow sets the saturated flag", outboundIdsSaturated(), true);
+    rememberOutboundId("held", clock);
+    equal("overflow does not evict the held id", rememberOutboundId("overflow", clock), false);
+    equal("overflow sets the saturated flag", outboundIdsSaturated(clock), true);
     const saturated = createReactionIntake({ user: { id: bot } }, { now: () => clock });
     saturated.open();
     clock += 2000;
@@ -462,6 +461,70 @@ try {
       0,
     );
     saturated.close();
+    configureOutboundIds({ maxItems: 100_000, ttlMs: 60 * 60 * 1000 });
+    clearOutboundIds();
+  }
+
+  section("saturation stays shut until one ttl after the last refusal");
+  {
+    clearOutboundIds();
+    const ttl = 1_000;
+    const base = 1_900_000_000_000;
+    configureOutboundIds({ maxItems: 2, ttlMs: ttl });
+    rememberOutboundId("old-id", base);
+    rememberOutboundId("mid-id", base + 10);
+    const refusedAt = base + 20;
+    const refused = `refused-${++sequence}`;
+    equal("the full store refuses the id", rememberOutboundId(refused, refusedAt), false);
+    equal("refusal arms the window", outboundIdsSaturated(refusedAt), true);
+    const expired = base + ttl;
+    equal("the older id expires", isOutboundId("old-id", expired), false);
+    equal("the newer id is still tracked", isOutboundId("mid-id", expired), true);
+    equal("expiry does not clear the refusal window", outboundIdsSaturated(expired), true);
+    const another = `another-${++sequence}`;
+    equal("a free slot accepts another id", rememberOutboundId(another, expired), true);
+    equal("a later accept does not clear the window", outboundIdsSaturated(expired), true);
+    equal(
+      "a later accept does not extend the window",
+      outboundIdsSaturated(refusedAt + ttl),
+      false,
+    );
+
+    clock = base;
+    const intake = createReactionIntake({ user: { id: bot } }, { now: () => clock });
+    intake.open();
+    clock = expired;
+    const before = intake.stats().items;
+    const notify = (id) =>
+      intake.observeUpsert({
+        type: "notify",
+        messages: [text(id, { messageTimestamp: Math.floor(clock / 1000) })],
+      });
+    notify(refused);
+    equal("refused id stays rejected inside the window", intake.stats().items, before);
+    clock = refusedAt + ttl;
+    notify(refused);
+    equal("the refused id is accepted after the window", intake.stats().items, before + 1);
+    notify(another);
+    equal("a tracked id stays rejected after the window", intake.stats().items, before + 1);
+    intake.close();
+
+    clearOutboundIds();
+    configureOutboundIds({ maxItems: 1, ttlMs: ttl });
+    rememberOutboundId("only", base);
+    equal("the first refusal is refused", rememberOutboundId("no-1", base), false);
+    equal("the first window is still shut", outboundIdsSaturated(base + ttl - 1), true);
+    equal("a later refusal is refused", rememberOutboundId("no-2", base + 50), false);
+    equal(
+      "the later refusal keeps the earlier boundary shut",
+      outboundIdsSaturated(base + ttl),
+      true,
+    );
+    equal(
+      "the window opens one ttl after the last refusal",
+      outboundIdsSaturated(base + 50 + ttl),
+      false,
+    );
     configureOutboundIds({ maxItems: 100_000, ttlMs: 60 * 60 * 1000 });
     clearOutboundIds();
   }
