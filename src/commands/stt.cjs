@@ -8,6 +8,7 @@ const { unwrapMessage } = require("../utils/messageContent.cjs");
 const { baseMimeType, downloadMedia } = require("../utils/geminiMedia.cjs");
 
 const settings = require("../config/settings.cjs");
+const runtime = require("../config/runtime-config.cjs");
 const providerUrl = require("../utils/providerUrl.cjs");
 const { t } = require("../utils/i18n.cjs");
 const { assertAudio, assertWhatsAppAudio, MAX_MEDIA_BYTES } = require("../services/aiMedia.cjs");
@@ -74,8 +75,19 @@ async function transcribeWithGemini(audioBuffer, mimetype, signal, admit) {
   await providerUrl.assertProviderRequestUrl(gemini.baseUrl, {
     allowLoopback: true,
   });
-  // The switch, provider, or key may change while endpoint validation is in flight.
-  await admitUpload(admit, "gemini");
+  // Typed !stt keeps the client captured above. A reaction reads the key
+  // after DNS and sends that exact key; the validated base URL stays put.
+  let genAI = gemini.genAI;
+  if (typeof admit === "function") {
+    const creds = sealReactionUpload("gemini");
+    genAI = new GoogleGenAI({
+      apiKey: creds.apiKey,
+      apiVersion: "v1beta",
+      httpOptions: geminiHttpOptions(gemini.baseUrl),
+    });
+  } else {
+    await admitUpload(admit, "gemini");
+  }
   signal?.throwIfAborted();
 
   // WhatsApp labels voice notes `audio/ogg; codecs=opus`; Gemini's type is
@@ -83,7 +95,7 @@ async function transcribeWithGemini(audioBuffer, mimetype, signal, admit) {
   const mimeType = baseMimeType(mimetype, "audio");
   const audioPart = { inlineData: { mimeType, data: audioBuffer.toString("base64") } };
 
-  const response = await gemini.genAI.models.generateContent({
+  const response = await genAI.models.generateContent({
     model: sttModel(),
     contents: [{ role: "user", parts: [audioPart, { text: TRANSCRIBE_PROMPT }] }],
     config: {
@@ -134,7 +146,18 @@ async function transcribeWithOpenAi(audioBuffer, mimetype, signal, admit) {
         body: formData,
         signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
       },
-      { allowLoopback: true },
+      {
+        allowLoopback: true,
+        // OpenAI resolves DNS inside this fetch. The reaction check runs after
+        // that lookup and replaces the header with the key it just read.
+        prepareRequest:
+          typeof admit === "function"
+            ? () => {
+                const creds = sealReactionUpload("openai");
+                return { headers: { Authorization: `Bearer ${creds.apiKey}` } };
+              }
+            : undefined,
+      },
     );
     if (!res.ok) {
       await res.body?.cancel().catch(() => {});
@@ -237,6 +260,17 @@ function admitReactionUpload(provider) {
   const selected = resolveSttProvider();
   if (selected !== provider || !settings.get(`${selected}_api_key`))
     reactionCode("STT_KEY_REQUIRED");
+}
+
+// The last check before the upload bytes leave. Synchronous: the returned key
+// is the one the request sends. A failed check throws and nothing is uploaded.
+function sealReactionUpload(provider) {
+  if (runtime.isDisabled("stt")) reactionCode("REACTION_COMMAND_DENIED");
+  if (!settings.get("ai_stt_enabled")) reactionCode("REACTION_STT_DISABLED");
+  const selected = resolveSttProvider();
+  const apiKey = settings.get(`${selected}_api_key`);
+  if (selected !== provider || !apiKey) reactionCode("STT_KEY_REQUIRED");
+  return { provider: selected, apiKey };
 }
 
 // A reaction quotes the voice note. The command text is not the audio.
