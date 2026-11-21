@@ -195,15 +195,27 @@ export async function saveAutoReplyPatch({
   put,
   load,
   isConflict,
-}: AutoReplySaveDeps): Promise<{ config: AutoReplyConfig; reloaded: boolean }> {
+}: AutoReplySaveDeps): Promise<{
+  config: AutoReplyConfig;
+  reloaded: boolean;
+  appliedBaseRevision?: number;
+}> {
   const send = (base: AutoReplyConfig) => put(normalizeAutoReplyConfig(base, patch(base)));
   try {
-    return { config: normalizeAutoReplyConfig(await send(current)), reloaded: false };
+    return {
+      config: normalizeAutoReplyConfig(await send(current)),
+      reloaded: false,
+      appliedBaseRevision: current.revision,
+    };
   } catch (error) {
     if (!isConflict(error)) throw error;
   }
   const fresh = normalizeAutoReplyConfig(await load());
-  return { config: normalizeAutoReplyConfig(await send(fresh)), reloaded: true };
+  return {
+    config: normalizeAutoReplyConfig(await send(fresh)),
+    reloaded: true,
+    appliedBaseRevision: fresh.revision,
+  };
 }
 
 export type AutoReplyFormSaveResult =
@@ -283,7 +295,7 @@ export function autoReplyFormDataFrom(config: AutoReplyConfig): AutoReplyFormDat
   };
 }
 
-function sameAutoReplyFormFields(a: AutoReplyFormData, b: AutoReplyFormData): boolean {
+export function sameAutoReplyFormFields(a: AutoReplyFormData, b: AutoReplyFormData): boolean {
   return (
     a.scopeMode === b.scopeMode &&
     a.globalPerHour === b.globalPerHour &&
@@ -302,12 +314,14 @@ function sameAutoReplyFormFields(a: AutoReplyFormData, b: AutoReplyFormData): bo
  *   submitted snapshot (`submittedDraft`) so any edit made while the request
  *   was in flight is preserved and untouched fields adopt the server's baseline.
  * - After an immediate toggle updates the baseline: if the draft has no unsaved
- *   edits it adopts `nextBaseline`; if the server's form fields did not change
- *   (only the toggle switch and revision changed) the draft keeps its edits and
- *   advances `baseRevision` to `nextBaseline.baseRevision`; if another tab
- *   changed form fields on the server while this tab has unsaved form edits,
- *   the draft keeps its original `baseRevision` and never merges list fields
- *   silently, so saving it gets 409 CONFLICT.
+ *   edits and is built on `previousBaseline`, it adopts `nextBaseline`; if the
+ *   server's form fields did not change (only the toggle switch and revision
+ *   changed) and the draft's `baseRevision` equals the revision of the server
+ *   baseline the toggle was applied over (the immediately previous revision),
+ *   the draft keeps its edits and advances `baseRevision` to
+ *   `nextBaseline.baseRevision`; otherwise the draft keeps its original
+ *   `baseRevision` and never merges list fields silently, so saving it gets 409
+ *   CONFLICT.
  */
 export function reconcileAutoReplyDraft({
   draft,
@@ -315,19 +329,38 @@ export function reconcileAutoReplyDraft({
   nextBaseline,
   submittedDraft = null,
   conflictReload = false,
+  appliedBaseRevision,
 }: {
   draft: AutoReplyFormData;
   previousBaseline: AutoReplyFormData;
   nextBaseline: AutoReplyFormData;
   submittedDraft?: AutoReplyFormData | null;
   conflictReload?: boolean;
+  appliedBaseRevision?: number;
 }): AutoReplyFormData {
   if (conflictReload) return nextBaseline;
   if (submittedDraft === null) {
-    const hasDraftEdits = !sameAutoReplyFormFields(draft, previousBaseline);
+    const hasDraftEdits =
+      !sameAutoReplyFormFields(draft, previousBaseline) ||
+      draft.baseRevision !== previousBaseline.baseRevision;
     if (!hasDraftEdits) return nextBaseline;
     const baselineFormChanged = !sameAutoReplyFormFields(previousBaseline, nextBaseline);
-    if (baselineFormChanged) {
+    const expectedPreviousRevision =
+      appliedBaseRevision !== undefined
+        ? appliedBaseRevision
+        : nextBaseline.baseRevision !== undefined && nextBaseline.baseRevision > 0
+          ? nextBaseline.baseRevision - 1
+          : undefined;
+    const canAdvanceBaseRevision =
+      !baselineFormChanged &&
+      ((draft.baseRevision === undefined &&
+        previousBaseline.baseRevision === undefined &&
+        nextBaseline.baseRevision === undefined) ||
+        (draft.baseRevision !== undefined &&
+          draft.baseRevision === previousBaseline.baseRevision &&
+          expectedPreviousRevision !== undefined &&
+          draft.baseRevision === expectedPreviousRevision));
+    if (!canAdvanceBaseRevision) {
       return {
         ...draft,
         baseRevision:

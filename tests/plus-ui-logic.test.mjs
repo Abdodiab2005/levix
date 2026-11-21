@@ -1320,6 +1320,189 @@ section("F1: optimistic revision on Auto Reply saves and 409 CONFLICT recovery")
     equal("Tab B draft resets to baseRevision 3 after conflict reload", tabBDraft.baseRevision, 3);
     deepEqual("Tab B draft now has Tab A's exclusion", tabBDraft.excludedChats, [tabAExclusion]);
   }
+
+  // Round-4 F1 exact scenario with two toggles:
+  // Tab A excludes X; Tab B has a dirty exclusion list built on an older revision and
+  // toggles groups; conflict recovery keeps B's old base; B's second toggle does NOT
+  // advance B's base revision even though the previous and new server baselines match
+  // apart from the toggled field; B's Save gets 409, reloads, and X survives.
+  {
+    const initialDoc = normalizeAutoReplyConfig({
+      schemaVersion: 1,
+      enabled: true,
+      killSwitch: false,
+      globalPerHour: 30,
+      scopeMode: "except",
+      groupsEnabled: false,
+      chats: [],
+      excludedChats: [],
+      policy: DEFAULT_AUTO_REPLY_POLICY,
+      revision: 1,
+    });
+    let liveServer = structuredClone(initialDoc);
+    const tabAExclusion = "201555555555@s.whatsapp.net";
+    const tabBDirtyExclusion = "201999999999@s.whatsapp.net";
+
+    const serverPut = async (body) => {
+      if (body.revision !== liveServer.revision) {
+        const err = new Error("CONFLICT");
+        err.code = "CONFLICT";
+        throw err;
+      }
+      liveServer = normalizeAutoReplyConfig({
+        ...body,
+        revision: liveServer.revision + 1,
+      });
+      return structuredClone(liveServer);
+    };
+    const serverLoad = async () => structuredClone(liveServer);
+
+    // Both Tab A and Tab B start at revision 1.
+    const tabADoc = structuredClone(initialDoc);
+    let tabBSavedRef = structuredClone(initialDoc);
+    let tabBBaseline = autoReplyFormDataFrom(tabBSavedRef);
+    // Tab B has a dirty exclusion list built on revision 1 (without X).
+    let tabBDraft = {
+      ...tabBBaseline,
+      excludedChats: [tabBDirtyExclusion],
+    };
+
+    // 1. Tab A excludes X and saves (server moves from revision 1 to 2).
+    await serverPut({
+      ...tabADoc,
+      excludedChats: [tabAExclusion],
+    });
+    equal("two-toggle F1: Tab A save moved server to revision 2", liveServer.revision, 2);
+    deepEqual("two-toggle F1: Tab A excluded X on server", liveServer.excludedChats, [
+      tabAExclusion,
+    ]);
+
+    // 2. Tab B's first toggle (groupsEnabled -> true): hits 409 on rev 1, reloads rev 2, saves rev 3.
+    const firstToggle = await saveAutoReplyPatch({
+      current: tabBSavedRef,
+      patch: () => ({ groupsEnabled: true }),
+      put: serverPut,
+      load: serverLoad,
+      isConflict,
+    });
+    equal("two-toggle F1: first toggle reloaded after conflict", firstToggle.reloaded, true);
+    equal(
+      "two-toggle F1: first toggle applied over reloaded rev 2",
+      firstToggle.appliedBaseRevision,
+      2,
+    );
+    equal("two-toggle F1: first toggle saved revision 3", firstToggle.config.revision, 3);
+    tabBSavedRef = firstToggle.config;
+    const prevAfterFirst = tabBBaseline;
+    tabBBaseline = autoReplyFormDataFrom(firstToggle.config);
+    tabBDraft = reconcileAutoReplyDraft({
+      draft: tabBDraft,
+      previousBaseline: prevAfterFirst,
+      nextBaseline: tabBBaseline,
+      submittedDraft: null,
+      conflictReload: false,
+      appliedBaseRevision: firstToggle.appliedBaseRevision,
+    });
+    equal(
+      "two-toggle F1: conflict recovery keeps Tab B's old baseRevision 1",
+      tabBDraft.baseRevision,
+      1,
+    );
+    deepEqual(
+      "two-toggle F1: Tab B still holds its dirty exclusion list in draft",
+      tabBDraft.excludedChats,
+      [tabBDirtyExclusion],
+    );
+
+    // 3. Tab B's second toggle (groupsEnabled -> false): applied over rev 3, saves rev 4 without conflict.
+    // The previous (rev 3) and new (rev 4) server baselines have identical form fields ([X]).
+    const secondToggle = await saveAutoReplyPatch({
+      current: tabBSavedRef,
+      patch: () => ({ groupsEnabled: false }),
+      put: serverPut,
+      load: serverLoad,
+      isConflict,
+    });
+    equal("two-toggle F1: second toggle succeeded without conflict", secondToggle.reloaded, false);
+    equal(
+      "two-toggle F1: second toggle applied over revision 3",
+      secondToggle.appliedBaseRevision,
+      3,
+    );
+    equal("two-toggle F1: second toggle saved revision 4", secondToggle.config.revision, 4);
+    tabBSavedRef = secondToggle.config;
+    const prevAfterSecond = tabBBaseline;
+    tabBBaseline = autoReplyFormDataFrom(secondToggle.config);
+    tabBDraft = reconcileAutoReplyDraft({
+      draft: tabBDraft,
+      previousBaseline: prevAfterSecond,
+      nextBaseline: tabBBaseline,
+      submittedDraft: null,
+      conflictReload: false,
+      appliedBaseRevision: secondToggle.appliedBaseRevision,
+    });
+    equal(
+      "two-toggle F1: second toggle does NOT advance stale draft baseRevision (stays 1, not 4)",
+      tabBDraft.baseRevision,
+      1,
+    );
+
+    // 4. Tab B clicks Save: bound to baseRevision 1, so the server (at rev 4) refuses with 409.
+    const saveAfterTwoToggles = await saveAutoReplyForm({
+      current: tabBSavedRef,
+      baseRevision: tabBDraft.baseRevision,
+      patch: (current) => ({
+        scopeMode: tabBDraft.scopeMode,
+        globalPerHour: tabBDraft.globalPerHour,
+        chats: tabBDraft.chats,
+        excludedChats: tabBDraft.excludedChats,
+        policy: {
+          ...tabBDraft.policy,
+          globalMemory: { read: current.policy?.globalMemory?.read ?? false },
+        },
+      }),
+      put: serverPut,
+      load: serverLoad,
+      isConflict,
+    });
+    equal(
+      "two-toggle F1: Tab B's Save is refused with 409 (ok: false)",
+      saveAfterTwoToggles.ok,
+      false,
+    );
+    if (!saveAfterTwoToggles.ok) {
+      equal("two-toggle F1: Save reports conflict: true", saveAfterTwoToggles.conflict, true);
+      equal(
+        "two-toggle F1: Save reloads latest revision 4",
+        saveAfterTwoToggles.config.revision,
+        4,
+      );
+      deepEqual(
+        "two-toggle F1: reloaded config preserves Tab A's exclusion X",
+        saveAfterTwoToggles.config.excludedChats,
+        [tabAExclusion],
+      );
+      tabBSavedRef = saveAfterTwoToggles.config;
+      tabBBaseline = autoReplyFormDataFrom(saveAfterTwoToggles.config);
+      tabBDraft = reconcileAutoReplyDraft({
+        draft: tabBDraft,
+        previousBaseline: prevAfterSecond,
+        nextBaseline: tabBBaseline,
+        submittedDraft: null,
+        conflictReload: true,
+      });
+    }
+    deepEqual("two-toggle F1: X survives on the server", liveServer.excludedChats, [tabAExclusion]);
+    equal("two-toggle F1: server revision remains 4", liveServer.revision, 4);
+    equal(
+      "two-toggle F1: Tab B draft resets to revision 4 after conflict reload",
+      tabBDraft.baseRevision,
+      4,
+    );
+    deepEqual("two-toggle F1: Tab B draft now shows Tab A's exclusion X", tabBDraft.excludedChats, [
+      tabAExclusion,
+    ]);
+  }
 }
 
 section("F3: Auto Reply draft reconciliation and per-chat Apply label");
@@ -1443,6 +1626,27 @@ section("F3: Auto Reply draft reconciliation and per-chat Apply label");
   deepEqual(
     "concurrent form change during toggle never silently merges list fields",
     afterConcurrentToggleReload.excludedChats,
+    ["201999999999@s.whatsapp.net"],
+  );
+
+  // 6. A second toggle after conflict recovery (where previousBaseline and nextBaseline
+  // have identical form fields at revisions 3 and 4) still keeps the draft's old
+  // baseRevision (1) because 1 !== 3 (the baseline the second toggle was applied over).
+  const afterSecondToggleOnStaleDraft = reconcileAutoReplyDraft({
+    draft: afterConcurrentToggleReload,
+    previousBaseline: reloadedBaseline,
+    nextBaseline: { ...reloadedBaseline, baseRevision: 4 },
+    submittedDraft: null,
+    conflictReload: false,
+  });
+  equal(
+    "second toggle after conflict recovery does not advance stale draft baseRevision",
+    afterSecondToggleOnStaleDraft.baseRevision,
+    1,
+  );
+  deepEqual(
+    "second toggle after conflict recovery keeps dirty draft exclusions unmerged",
+    afterSecondToggleOnStaleDraft.excludedChats,
     ["201999999999@s.whatsapp.net"],
   );
 
