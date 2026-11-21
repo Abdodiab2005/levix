@@ -107,7 +107,7 @@ export function setupEventListeners(
   // Save credentials
   if (saveCreds) listen(sock.ev, "creds.update", saveCreds);
 
-  // The linked account's own display name, from creds and from its own messages.
+  // The linked account's own display name from its live messages.
   // Fenced to the live socket generation; the disposer removes it on detach.
   const ownerName = (candidate) => {
     if (!isLive() || !candidate) return;
@@ -117,7 +117,6 @@ export function setupEventListeners(
       logger.warn({ err }, "[User Metadata] owner display name update failed");
     }
   };
-  listen(sock.ev, "creds.update", (update) => ownerName(cleanOwnerName(update?.me?.name)));
 
   // Address-book names (`name`) and push names (`notify`) from the linked phone.
   // No history sync — these events are the live contact list WhatsApp already

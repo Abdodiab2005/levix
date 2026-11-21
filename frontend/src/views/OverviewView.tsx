@@ -81,6 +81,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [starting, setStarting] = useState(false);
+  const summaryGenerationRef = useRef(0);
 
   const isStartable = Boolean(
     status && ["idle", "disconnected", "retry_exhausted", "error"].includes(status.state),
@@ -119,6 +120,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
   // Fetch summaries once on mount and on explicit refresh.
   const loadSummaries = useCallback(
     async (isRefresh = false) => {
+      const generation = ++summaryGenerationRef.current;
       if (isRefresh) setRefreshing(true);
       try {
         const [statsRes, settingsRes, schedulesRes, reactionsRes, todosRes] =
@@ -129,6 +131,8 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
             api.getReactions(),
             api.get<{ todos?: TodoRowLike[] }>("/todos"),
           ]);
+
+        if (summaryGenerationRef.current !== generation) return;
 
         if (statsRes.status === "fulfilled" && statsRes.value?.stats) {
           setStats(statsRes.value.stats);
@@ -160,8 +164,10 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
           setTodos(allTodos.slice(0, 10));
         }
       } finally {
-        setLoading(false);
-        if (isRefresh) setRefreshing(false);
+        if (summaryGenerationRef.current === generation) {
+          setLoading(false);
+          if (isRefresh) setRefreshing(false);
+        }
       }
     },
     [t, toast],
@@ -241,38 +247,41 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
         starting={starting}
       />
 
-      <div className="flex items-center justify-end">
-        <IconButton
-          label={t("overviewRefresh")}
-          icon={<RefreshCw size={16} className={refreshing ? "animate-spin" : undefined} />}
-          onClick={() => void loadSummaries(true)}
-          disabled={loading || refreshing}
-        />
-      </div>
-
       {/* 2. Key stats as StatTile in a 2-column mobile grid */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" data-tour="overview-stats">
-        <StatTile
-          label={t("totalGroups")}
-          value={loading ? "—" : (stats?.totalGroups ?? 0)}
-          icon={<Users size={16} />}
-        />
-        <StatTile
-          label={t("commandCount")}
-          value={loading ? "—" : (stats?.commandCount ?? 0)}
-          icon={<Terminal size={16} />}
-        />
-        <StatTile
-          label={t("uptime")}
-          value={loading ? "—" : formatUptime(stats?.uptime || 0)}
-          icon={<Clock size={16} />}
-        />
-        <StatTile
-          label={t("activeSchedules")}
-          value={loading ? "—" : activeSchedulesCount}
-          icon={<Calendar size={16} />}
-        />
-      </div>
+      <Section
+        title={t("overviewStatsTitle")}
+        actions={
+          <IconButton
+            label={t("overviewRefresh")}
+            icon={<RefreshCw size={16} className={refreshing ? "animate-spin" : undefined} />}
+            onClick={() => void loadSummaries(true)}
+            disabled={loading || refreshing}
+          />
+        }
+      >
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" data-tour="overview-stats">
+          <StatTile
+            label={t("totalGroups")}
+            value={loading ? "—" : (stats?.totalGroups ?? 0)}
+            icon={<Users size={16} />}
+          />
+          <StatTile
+            label={t("commandCount")}
+            value={loading ? "—" : (stats?.commandCount ?? 0)}
+            icon={<Terminal size={16} />}
+          />
+          <StatTile
+            label={t("uptime")}
+            value={loading ? "—" : formatUptime(stats?.uptime || 0)}
+            icon={<Clock size={16} />}
+          />
+          <StatTile
+            label={t("activeSchedules")}
+            value={loading ? "—" : activeSchedulesCount}
+            icon={<Calendar size={16} />}
+          />
+        </div>
+      </Section>
 
       {/* 3. Needs Attention (hidden entirely when nothing needs attention) */}
       {attentionItems.length > 0 && (

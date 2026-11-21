@@ -26,6 +26,11 @@ section("OverviewView section order and design contract");
 
   ok("1. compact account card is first", cardIdx > 0);
   ok("2. StatTile grid follows account card", statsIdx > cardIdx && overview.includes("<StatTile"));
+  const statsSectionIdx = overview.indexOf('title={t("overviewStatsTitle")}');
+  ok(
+    "2b. stats grid is wrapped in Section with overviewStatsTitle",
+    statsSectionIdx > cardIdx && statsIdx > statsSectionIdx,
+  );
   ok("3. Needs Attention follows StatTile grid", attentionIdx > statsIdx);
   ok("4. Quick Actions follows Needs Attention", quickIdx > attentionIdx);
   ok("5. Upcoming items follow Quick Actions", upcomingIdx > quickIdx);
@@ -237,9 +242,94 @@ section("OverviewView design contract: isolated phone labels, refresh button, an
     overview.includes("<IconButton") && overview.includes('label={t("overviewRefresh")}'),
   );
   ok(
+    "refresh IconButton is passed as Section actions",
+    overview.includes('title={t("overviewStatsTitle")}') &&
+      overview.includes("actions=") &&
+      overview.includes('label={t("overviewRefresh")}'),
+  );
+  ok("no standalone justify-end row holds the refresh button", !overview.includes("justify-end"));
+  ok(
     "overview refetches on reconnect (when connected after not being connected)",
     overview.includes("!prevConnectedRef.current && isConnected"),
   );
+}
+
+section("OverviewView stats section header and i18n key presence in all catalogs");
+{
+  const catalogs = Object.fromEntries(
+    ["en", "ar", "pt-BR", "es-419"].map((locale) => [
+      locale,
+      JSON.parse(readFileSync(join(ROOT, "i18n", locale, "dashboard.json"), "utf8")),
+    ]),
+  );
+  for (const [locale, catalog] of Object.entries(catalogs)) {
+    ok(
+      `${locale} catalog has non-empty overviewStatsTitle`,
+      typeof catalog.overviewStatsTitle === "string" &&
+        catalog.overviewStatsTitle.trim().length > 0,
+    );
+  }
+  equal(
+    "English overviewStatsTitle is 'At a glance'",
+    catalogs.en.overviewStatsTitle,
+    "At a glance",
+  );
+}
+
+section("OverviewView summary load generation fencing");
+{
+  ok(
+    "overview declares summary generation ref",
+    overview.includes("summaryGenerationRef = useRef(0)"),
+  );
+  ok(
+    "overview increments generation on each summary load",
+    overview.includes("const generation = ++summaryGenerationRef.current"),
+  );
+  ok(
+    "overview drops stale results when generation is not latest",
+    overview.includes("if (summaryGenerationRef.current !== generation) return"),
+  );
+  ok(
+    "overview fences loading and refreshing state to latest generation",
+    overview.includes("if (summaryGenerationRef.current === generation)"),
+  );
+
+  // Pure logic simulation of out-of-order async responses:
+  // Request 1 starts (gen 1, slower mount/refresh)
+  // Request 2 starts (gen 2, faster reconnect/refresh)
+  // Request 2 completes first and sets state for Gen 2
+  // Request 1 completes later: its results, error toast, and loading state update are dropped
+  let genCounter = 0;
+  let appliedGen = null;
+  let appliedTotal = null;
+  let loadingState = false;
+  let toastError = null;
+
+  const simulateLoad = async (gen, total, shouldError, delayMs) => {
+    loadingState = true;
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    if (genCounter !== gen) return; // Stale generation fenced
+    if (shouldError) {
+      toastError = "Failed";
+    } else {
+      appliedGen = gen;
+      appliedTotal = total;
+    }
+    loadingState = false;
+  };
+
+  const g1 = ++genCounter;
+  const p1 = simulateLoad(g1, 10, true, 40); // earlier request that fails slowly
+  const g2 = ++genCounter;
+  const p2 = simulateLoad(g2, 25, false, 10); // newer request that succeeds quickly
+
+  await Promise.all([p1, p2]);
+
+  equal("applied generation is newest (gen 2)", appliedGen, 2);
+  equal("applied total is from newest (gen 2)", appliedTotal, 25);
+  equal("stale error from older generation was suppressed", toastError, null);
+  equal("loading state is cleared after newest generation completes", loadingState, false);
 }
 
 section("countActiveSchedules and countOpenTodos compute full totals before bounding");

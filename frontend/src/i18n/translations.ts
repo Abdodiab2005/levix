@@ -1830,6 +1830,7 @@ const en = {
   overviewUpcomingSchedulesHeading: "Next scheduled sends",
   overviewOpenTodosHeading: "Open todos",
   overviewRefresh: "Refresh overview",
+  overviewStatsTitle: "At a glance",
 };
 
 export type MessageKey = keyof typeof en;
@@ -3668,6 +3669,7 @@ export const translations: {
     overviewUpcomingSchedulesHeading: "الرسائل المجدولة القادمة",
     overviewOpenTodosHeading: "المهام المفتوحة",
     overviewRefresh: "تحديث النظرة العامة",
+    overviewStatsTitle: "لمحة سريعة",
   },
   en,
   "pt-BR": {
@@ -5498,6 +5500,7 @@ export const translations: {
     overviewUpcomingSchedulesHeading: "Próximos envios agendados",
     overviewOpenTodosHeading: "Tarefas abertas",
     overviewRefresh: "Atualizar visão geral",
+    overviewStatsTitle: "Em um relance",
   },
   "es-419": {
     tabBackup: "Copia de seguridad y restauración",
@@ -7327,6 +7330,7 @@ export const translations: {
     overviewUpcomingSchedulesHeading: "Próximos envíos programados",
     overviewOpenTodosHeading: "Tareas pendientes",
     overviewRefresh: "Actualizar resumen",
+    overviewStatsTitle: "De un vistazo",
   },
 };
 
