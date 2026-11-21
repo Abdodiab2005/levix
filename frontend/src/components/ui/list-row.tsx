@@ -8,11 +8,21 @@ const listRowVariants = {
   ghost: "border-transparent bg-transparent",
 } as const;
 
+const titleLineClasses = {
+  1: "line-clamp-1",
+  2: "line-clamp-2",
+  3: "line-clamp-3",
+  none: "",
+} as const;
+
 export type ListRowVariant = keyof typeof listRowVariants;
+export type ListRowTitleLines = keyof typeof titleLineClasses;
 
 export interface ListRowProps {
   leading?: ReactNode;
   title: ReactNode;
+  /** Maximum lines for the title before clamping. Defaults to 2; "none" shows the full text. */
+  titleLines?: ListRowTitleLines;
   meta?: ReactNode;
   /** Actions at the end of the row. They stay outside the clickable area. */
   trailing?: ReactNode;
@@ -29,6 +39,7 @@ export interface ListRowProps {
 export function ListRow({
   leading,
   title,
+  titleLines = 2,
   meta,
   trailing,
   onClick,
@@ -46,8 +57,13 @@ export function ListRow({
         </span>
       )}
       <span className="flex min-w-0 flex-1 flex-col">
-        {/* Two lines at most, so a long name stays readable without a tooltip. */}
-        <span className="line-clamp-2 break-words text-sm font-semibold text-text-main">
+        {/* Two lines by default so a long name stays readable; "none" expands in full. */}
+        <span
+          className={cn(
+            "break-words text-sm font-semibold text-text-main",
+            titleLineClasses[titleLines],
+          )}
+        >
           {title}
         </span>
         {meta && <span className="mt-0.5 line-clamp-2 break-words text-xs text-muted">{meta}</span>}

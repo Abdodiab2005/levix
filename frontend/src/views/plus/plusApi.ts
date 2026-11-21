@@ -15,6 +15,7 @@ export const plusDelete = <T>(path: string) => api.delete<T>(`${BASE}${path}`);
 /** Every contract error code, plus the two client-side codes, in one place. */
 const ERROR_KEYS: Record<string, MessageKey> = {
   inactive: "plusExtErrorInactive",
+  CONFLICT: "plusExtErrorConflict",
   BAD_REQUEST: "plusExtErrorBadRequest",
   INVALID_TEMPLATE: "plusExtErrorInvalidTemplate",
   UNKNOWN_PLACEHOLDER: "plusExtErrorUnknownPlaceholder",
@@ -27,10 +28,19 @@ const ERROR_KEYS: Record<string, MessageKey> = {
   network: "plusErrorNetwork",
 };
 
-/** A stable code for any failure of an ext route. 409 is always "inactive". */
+/**
+ * A stable code for any failure of an ext route. The extension answers 409 for
+ * two different things and the body tells them apart: `inactive` means Core
+ * stopped the extension, `CONFLICT` means the Auto Reply document changed since
+ * this tab read it. An unknown 409 body stays `inactive`, as before.
+ */
 export function plusErrorCode(error: unknown): string {
   if (!(error instanceof ApiError)) return "network";
-  if (error.status === 409) return "inactive";
+  if (error.status === 409) {
+    const fromBody = error.data?.error;
+    if (typeof fromBody === "string" && fromBody && fromBody !== "inactive") return fromBody;
+    return "inactive";
+  }
   if (error.status === 0) return "network";
   if (error.code) return error.code;
   const fromBody = error.data?.error;

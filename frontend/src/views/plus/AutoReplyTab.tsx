@@ -35,13 +35,19 @@ import { recipientParts } from "../../utils/recipientLabel";
 import { AutoReplyChatEditor } from "./AutoReplyChatEditor";
 import { plusErrorCode, plusErrorMessage, plusGet, plusPut } from "./plusApi";
 import {
+  type AutoReplyFormData,
   addAutoReplyChat,
   addExcludedChat,
+  autoReplyFormDataFrom,
   createWriteQueue,
   describeAutoReplyPeers,
   fallbackRecipientForJid,
+  policyDraftFrom,
+  reconcileAutoReplyDraft,
   removeAutoReplyChat,
   removeExcludedChat,
+  saveAutoReplyForm,
+  saveAutoReplyPatch,
   setAutoReplyScopeMode,
 } from "./plusUiLogic";
 import {
@@ -136,29 +142,6 @@ export function AutoReplyTab({ onInactive }: { onInactive: () => void }) {
   );
 }
 
-type AutoReplyPolicyDraft = Omit<AutoReplyPolicy, "globalMemory">;
-
-type AutoReplyFormData = {
-  scopeMode: AutoReplyScopeMode;
-  globalPerHour: number;
-  chats: AutoReplyChat[];
-  excludedChats: string[];
-  policy: AutoReplyPolicyDraft;
-};
-
-function policyDraftFrom(policy?: AutoReplyPolicy): AutoReplyPolicyDraft {
-  const source = policy ?? DEFAULT_AUTO_REPLY_POLICY;
-  return {
-    privateTrigger: source.privateTrigger,
-    groupTrigger: source.groupTrigger,
-    keywords: [...source.keywords],
-    instructions: source.instructions,
-    cooldownSeconds: source.cooldownSeconds,
-    perSenderPerHour: source.perSenderPerHour,
-    perChatPerHour: source.perChatPerHour,
-  };
-}
-
 function AutoReplyForm({
   config,
   recipients,
@@ -198,26 +181,27 @@ function AutoReplyForm({
     plusErrorMessage,
   );
   const prevBaselineRef = useRef(savedBaseline);
+  const submittedDraftRef = useRef<AutoReplyFormData | null>(null);
+  const conflictReloadRef = useRef(false);
+  const formSaving = form.status === "saving";
 
   useEffect(() => {
     if (prevBaselineRef.current !== savedBaseline) {
       const prev = prevBaselineRef.current;
       prevBaselineRef.current = savedBaseline;
-      const editedScope = form.draft.scopeMode !== prev.scopeMode;
-      const editedLimit = form.draft.globalPerHour !== prev.globalPerHour;
-      const editedChats = JSON.stringify(form.draft.chats) !== JSON.stringify(prev.chats);
-      const editedExcluded =
-        JSON.stringify(form.draft.excludedChats) !== JSON.stringify(prev.excludedChats);
-      const editedPolicy = JSON.stringify(form.draft.policy) !== JSON.stringify(prev.policy);
-      if (editedScope || editedLimit || editedChats || editedExcluded || editedPolicy) {
-        form.setDraft({
-          scopeMode: editedScope ? form.draft.scopeMode : savedBaseline.scopeMode,
-          globalPerHour: editedLimit ? form.draft.globalPerHour : savedBaseline.globalPerHour,
-          chats: editedChats ? form.draft.chats : savedBaseline.chats,
-          excludedChats: editedExcluded ? form.draft.excludedChats : savedBaseline.excludedChats,
-          policy: editedPolicy ? form.draft.policy : savedBaseline.policy,
-        });
-      }
+      const submitted = submittedDraftRef.current;
+      const conflictReload = conflictReloadRef.current;
+      submittedDraftRef.current = null;
+      conflictReloadRef.current = false;
+      form.setDraft(
+        reconcileAutoReplyDraft({
+          draft: form.draft,
+          previousBaseline: prev,
+          nextBaseline: savedBaseline,
+          submittedDraft: submitted,
+          conflictReload,
+        }),
+      );
     }
   }, [savedBaseline, form.draft, form.setDraft]);
 
@@ -281,14 +265,15 @@ function AutoReplyForm({
     setBusy(true);
     setToggleError(null);
     try {
-      const next = await writeQueueRef.current.enqueue(async () => {
-        const current = savedRef.current;
-        return plusPut<AutoReplyConfig>(
-          "/auto-reply",
-          normalizeAutoReplyConfig(current, buildPatch(current)),
-        );
-      });
-      const normalized = normalizeAutoReplyConfig(next);
+      const { config: normalized } = await writeQueueRef.current.enqueue(() =>
+        saveAutoReplyPatch({
+          current: savedRef.current,
+          patch: buildPatch,
+          put: (body) => plusPut<AutoReplyConfig>("/auto-reply", body),
+          load: () => plusGet<AutoReplyConfig>("/auto-reply"),
+          isConflict: (err) => plusErrorCode(err) === "CONFLICT",
+        }),
+      );
       savedRef.current = normalized;
       onSaved(normalized);
     } catch (err) {
@@ -308,6 +293,7 @@ function AutoReplyForm({
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    if (formSaving) return;
     const range = (min: number, max: number) => fill(t("plusAutoReplyRange"), { min, max });
     const limit = form.draft.globalPerHour;
     const validGlobal =
@@ -348,14 +334,21 @@ function AutoReplyForm({
 
     if (!validGlobal || !validCooldown || !validSender || !validChat) return;
 
+    submittedDraftRef.current = {
+      scopeMode: form.draft.scopeMode,
+      globalPerHour: form.draft.globalPerHour,
+      chats: form.draft.chats,
+      excludedChats: form.draft.excludedChats,
+      policy: { ...form.draft.policy, keywords: [...form.draft.policy.keywords] },
+    };
+    conflictReloadRef.current = false;
+
     void form.save(async (draft) => {
       try {
-        const next = await writeQueueRef.current.enqueue(async () => {
-          const current = savedRef.current;
-          const currentMemory = current.policy?.globalMemory?.read ?? false;
-          return plusPut<AutoReplyConfig>(
-            "/auto-reply",
-            normalizeAutoReplyConfig(current, {
+        const outcome = await writeQueueRef.current.enqueue(() =>
+          saveAutoReplyForm({
+            current: savedRef.current,
+            patch: (current) => ({
               scopeMode: draft.scopeMode,
               globalPerHour: draft.globalPerHour,
               chats: draft.chats,
@@ -363,15 +356,25 @@ function AutoReplyForm({
               policy: {
                 ...draft.policy,
                 instructions: draft.policy.instructions.trim(),
-                globalMemory: { read: currentMemory },
+                globalMemory: { read: current.policy?.globalMemory?.read ?? false },
               },
             }),
-          );
-        });
-        const normalized = normalizeAutoReplyConfig(next);
-        savedRef.current = normalized;
-        onSaved(normalized);
+            put: (body) => plusPut<AutoReplyConfig>("/auto-reply", body),
+            load: () => plusGet<AutoReplyConfig>("/auto-reply"),
+            isConflict: (err) => plusErrorCode(err) === "CONFLICT",
+          }),
+        );
+        savedRef.current = outcome.config;
+        if (!outcome.ok) {
+          submittedDraftRef.current = null;
+          conflictReloadRef.current = true;
+          onSaved(outcome.config);
+          form.setDraft(autoReplyFormDataFrom(outcome.config));
+          throw outcome.error;
+        }
+        onSaved(outcome.config);
       } catch (err) {
+        submittedDraftRef.current = null;
         if (plusErrorCode(err) === "inactive") onInactive();
         throw err;
       }
@@ -430,9 +433,15 @@ function AutoReplyForm({
         <Field label={t("plusAutoReplyScope")} description={scopeHint}>
           <SegmentedControl
             aria-label={t("plusAutoReplyScope")}
-            className="flex w-full flex-wrap"
+            className={
+              formSaving
+                ? "pointer-events-none flex w-full flex-wrap opacity-50"
+                : "flex w-full flex-wrap"
+            }
             value={form.draft.scopeMode}
-            onChange={(mode) => form.setDraft(setAutoReplyScopeMode(form.draft, mode))}
+            onChange={(mode) => {
+              if (!formSaving) form.setDraft(setAutoReplyScopeMode(form.draft, mode));
+            }}
             options={[
               { value: "all", label: t("plusAutoReplyScopeAll") },
               { value: "except", label: t("plusAutoReplyScopeExcept") },
@@ -457,7 +466,7 @@ function AutoReplyForm({
                 variant="secondary"
                 size="sm"
                 icon={<Plus size={16} />}
-                disabled={atChatLimit}
+                disabled={formSaving || atChatLimit}
                 onClick={() => setPickerMode("only")}
               >
                 {t("plusAutoReplyAddChat")}
@@ -499,20 +508,22 @@ function AutoReplyForm({
                           </span>
                         </span>
                       }
-                      onClick={() => setEditor({ chat })}
+                      onClick={formSaving ? undefined : () => setEditor({ chat })}
                       trailing={
                         <>
                           <IconButton
                             label={t("plusAutoReplyEditChat")}
                             icon={<Pencil size={16} />}
+                            disabled={formSaving}
                             onClick={() => setEditor({ chat })}
                           />
                           <OverflowMenu label={t("more")}>
-                            <MenuItem onSelect={() => toggleChat(chat)}>
+                            <MenuItem disabled={formSaving} onSelect={() => toggleChat(chat)}>
                               {chat.enabled ? t("plusAutoReplyDisable") : t("plusAutoReplyEnable")}
                             </MenuItem>
                             <MenuItem
                               danger
+                              disabled={formSaving}
                               icon={<Trash2 size={16} />}
                               onSelect={() => setPendingRemove(chat.jid)}
                             >
@@ -562,7 +573,7 @@ function AutoReplyForm({
                 variant="secondary"
                 size="sm"
                 icon={<Plus size={16} />}
-                disabled={atExcludedLimit}
+                disabled={formSaving || atExcludedLimit}
                 onClick={() => setPickerMode("except")}
               >
                 {t("plusAutoReplyAddExcluded")}
@@ -597,6 +608,7 @@ function AutoReplyForm({
                         <IconButton
                           label={fill(t("removeContact"), { name: peer.title })}
                           icon={<Trash2 size={16} />}
+                          disabled={formSaving}
                           onClick={() =>
                             form.setField(
                               "excludedChats",
@@ -623,6 +635,7 @@ function AutoReplyForm({
               <Field label={t("plusAutoReplyPrivateTrigger")} htmlFor="plus-policy-private-trigger">
                 <Select
                   id="plus-policy-private-trigger"
+                  disabled={formSaving}
                   value={form.draft.policy.privateTrigger}
                   onChange={(event) =>
                     form.setField("policy", {
@@ -641,6 +654,7 @@ function AutoReplyForm({
               <Field label={t("plusAutoReplyGroupTrigger")} htmlFor="plus-policy-group-trigger">
                 <Select
                   id="plus-policy-group-trigger"
+                  disabled={formSaving}
                   value={form.draft.policy.groupTrigger}
                   onChange={(event) =>
                     form.setField("policy", {
@@ -666,6 +680,7 @@ function AutoReplyForm({
               >
                 <ChipInput
                   value={form.draft.policy.keywords}
+                  disabled={formSaving}
                   onChange={(keywords) =>
                     form.setField("policy", { ...form.draft.policy, keywords })
                   }
@@ -696,6 +711,7 @@ function AutoReplyForm({
                 id="plus-policy-instructions"
                 dir="auto"
                 rows={3}
+                disabled={formSaving}
                 maxLength={PLUS_LIMITS.instructions}
                 value={form.draft.policy.instructions}
                 onChange={(event) =>
@@ -717,6 +733,7 @@ function AutoReplyForm({
                   id="plus-auto-reply-global"
                   type="number"
                   inputMode="numeric"
+                  disabled={formSaving}
                   min={PLUS_LIMITS.globalPerHour.min}
                   max={PLUS_LIMITS.globalPerHour.max}
                   value={String(form.draft.globalPerHour)}
@@ -736,6 +753,7 @@ function AutoReplyForm({
                   id="plus-policy-cooldown"
                   type="number"
                   inputMode="numeric"
+                  disabled={formSaving}
                   min={PLUS_LIMITS.cooldownSeconds.min}
                   max={PLUS_LIMITS.cooldownSeconds.max}
                   value={String(form.draft.policy.cooldownSeconds)}
@@ -758,6 +776,7 @@ function AutoReplyForm({
                   id="plus-policy-sender"
                   type="number"
                   inputMode="numeric"
+                  disabled={formSaving}
                   min={PLUS_LIMITS.perSenderPerHour.min}
                   max={PLUS_LIMITS.perSenderPerHour.max}
                   value={String(form.draft.policy.perSenderPerHour)}
@@ -780,6 +799,7 @@ function AutoReplyForm({
                   id="plus-policy-chat"
                   type="number"
                   inputMode="numeric"
+                  disabled={formSaving}
                   min={PLUS_LIMITS.perChatPerHour.min}
                   max={PLUS_LIMITS.perChatPerHour.max}
                   value={String(form.draft.policy.perChatPerHour)}

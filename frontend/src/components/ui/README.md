@@ -453,7 +453,7 @@ A compact metric tile designed for a 2-column mobile grid (`grid-cols-2`). Displ
 
 ### ListRow
 
-A compact list row for dense collections (Needs Attention items, Auto Reply chat targets, message templates). Accepts leading icons or avatars, a `title`, an optional `meta` line, and an optional `trailing` slot for action buttons or badges. Supports `as="li"` or `as="div"`, and optional `onClick` / `href` for interactive rows. `variant`: `default` | `raised` | `ghost`.
+A compact list row for dense collections (Needs Attention items, Auto Reply chat targets, message templates). Accepts leading icons or avatars, a `title`, an optional `titleLines` (`1` | `2` | `3` | `"none"`, default `2`; pass `"none"` to expand the full title), an optional `meta` line, and an optional `trailing` slot for action buttons or badges. Supports `as="li"` or `as="div"`, and optional `onClick` / `href` for interactive rows. `variant`: `default` | `raised` | `ghost`.
 
 ```tsx
 <ListRow

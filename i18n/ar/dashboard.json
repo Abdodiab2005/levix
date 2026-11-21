@@ -1852,5 +1852,7 @@
   "plusPresetProfessionalName": "احترافي",
   "plusPresetProfessionalDesc": "ردود مهذبة وواضحة للعمل والمحادثات الرسمية.",
   "plusPresetFunName": "مرح",
-  "plusPresetFunDesc": "ردود ودودة وحيوية بأسلوب لطيف."
+  "plusPresetFunDesc": "ردود ودودة وحيوية بأسلوب لطيف.",
+  "plusExtErrorConflict": "تغيرت إعدادات الرد التلقائي في علامة تبويب أخرى أو جهاز آخر. تم تحميل أحدث الإعدادات.",
+  "plusAutoReplyApply": "تطبيق"
 }

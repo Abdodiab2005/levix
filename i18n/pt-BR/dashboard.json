@@ -1852,5 +1852,7 @@
   "plusPresetProfessionalName": "Profissional",
   "plusPresetProfessionalDesc": "Respostas educadas e claras para trabalho e conversas formais.",
   "plusPresetFunName": "Divertido",
-  "plusPresetFunDesc": "Respostas calorosas e animadas com um tom amigável."
+  "plusPresetFunDesc": "Respostas calorosas e animadas com um tom amigável.",
+  "plusExtErrorConflict": "As configurações de resposta automática mudaram em outra guia ou dispositivo. As configurações mais recentes foram carregadas.",
+  "plusAutoReplyApply": "Aplicar"
 }

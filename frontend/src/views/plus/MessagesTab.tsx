@@ -229,6 +229,7 @@ export function MessagesTab({ onInactive }: { onInactive: () => void }) {
                 key={item.key}
                 as="li"
                 variant="raised"
+                titleLines={open ? "none" : 2}
                 onClick={() => setEditingKey(item.key)}
                 title={
                   <UserText
