@@ -48,6 +48,7 @@ import {
   reconcileAutoReplyDraft,
   removeAutoReplyChat,
   removeExcludedChat,
+  sameAutoReplyFormFields,
   saveAutoReplyForm,
   saveAutoReplyPatch,
   setAutoReplyScopeMode,
@@ -187,6 +188,7 @@ function AutoReplyForm({
   const prevBaselineRef = useRef(savedBaseline);
   const submittedDraftRef = useRef<AutoReplyFormData | null>(null);
   const conflictReloadRef = useRef(false);
+  const appliedBaseRevisionRef = useRef<number | undefined>(undefined);
   const formSaving = form.status === "saving";
 
   useEffect(() => {
@@ -195,8 +197,10 @@ function AutoReplyForm({
       prevBaselineRef.current = savedBaseline;
       const submitted = submittedDraftRef.current;
       const conflictReload = conflictReloadRef.current;
+      const appliedBaseRevision = appliedBaseRevisionRef.current;
       submittedDraftRef.current = null;
       conflictReloadRef.current = false;
+      appliedBaseRevisionRef.current = undefined;
       form.setDraft(
         reconcileAutoReplyDraft({
           draft: form.draft,
@@ -204,6 +208,7 @@ function AutoReplyForm({
           nextBaseline: savedBaseline,
           submittedDraft: submitted,
           conflictReload,
+          appliedBaseRevision,
         }),
       );
     }
@@ -269,7 +274,7 @@ function AutoReplyForm({
     setBusy(true);
     setToggleError(null);
     try {
-      const { config: normalized } = await writeQueueRef.current.enqueue(() =>
+      const { config: normalized, appliedBaseRevision } = await writeQueueRef.current.enqueue(() =>
         saveAutoReplyPatch({
           current: savedRef.current,
           patch: buildPatch,
@@ -281,6 +286,7 @@ function AutoReplyForm({
       savedRef.current = normalized;
       submittedDraftRef.current = null;
       conflictReloadRef.current = false;
+      appliedBaseRevisionRef.current = appliedBaseRevision;
       onSaved(normalized);
     } catch (err) {
       if (plusErrorCode(err) === "inactive") onInactive();
@@ -376,16 +382,23 @@ function AutoReplyForm({
         savedRef.current = outcome.config;
         if (!outcome.ok) {
           submittedDraftRef.current = null;
-          conflictReloadRef.current = true;
+          appliedBaseRevisionRef.current = undefined;
+          const reloadedBaseline = autoReplyFormDataFrom(outcome.config);
+          const baselineChanged =
+            reloadedBaseline.baseRevision !== savedBaseline.baseRevision ||
+            !sameAutoReplyFormFields(reloadedBaseline, savedBaseline);
+          conflictReloadRef.current = baselineChanged;
           onSaved(outcome.config);
-          form.setDraft(autoReplyFormDataFrom(outcome.config));
+          form.setDraft(baselineChanged ? reloadedBaseline : savedBaseline);
           throw outcome.error;
         }
         submittedDraftRef.current = submittedSnapshot;
         conflictReloadRef.current = false;
+        appliedBaseRevisionRef.current = undefined;
         onSaved(outcome.config);
       } catch (err) {
         submittedDraftRef.current = null;
+        appliedBaseRevisionRef.current = undefined;
         if (plusErrorCode(err) === "inactive") onInactive();
         throw err;
       }
