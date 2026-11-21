@@ -13,7 +13,10 @@ const {
   clearOutboundIds,
   clearRecentMessages,
   configureOutboundIds,
+  configureRecentCache,
+  getMessageFromRecent,
   isOutboundId,
+  outboundIdsSaturated,
   rememberMessage,
   rememberOutboundId,
 } = await import("../src/utils/recentMessageCache.esm.js");
@@ -173,24 +176,48 @@ try {
     mode = "ok";
   }
 
-  section("outbound ids evict and expire");
+  section("outbound ids stay while they can matter and fail closed when full");
   {
     clearOutboundIds();
     configureOutboundIds({ maxItems: 2, ttlMs: 1000 });
     const now = 5_000_000;
     rememberOutboundId("old", now);
     rememberOutboundId("mid", now);
-    rememberOutboundId("new", now);
-    equal("oldest id is evicted", isOutboundId("old", now), false);
-    equal("newest id remains", isOutboundId("new", now), true);
+    equal("a full id store rejects another young id", rememberOutboundId("new", now), false);
+    equal("oldest young id is retained", isOutboundId("old", now), true);
+    equal("saturation fails closed", outboundIdsSaturated(), true);
+    clearOutboundIds();
+    configureOutboundIds({ maxItems: 10, ttlMs: 1000 });
     rememberOutboundId("ttl", now);
     equal("id is live before the ttl", isOutboundId("ttl", now + 999), true);
     equal("id expires at the ttl", isOutboundId("ttl", now + 1000), false);
-    configureOutboundIds({ maxItems: 500, ttlMs: 60 * 60 * 1000 });
+    equal("expiry clears saturation", outboundIdsSaturated(), false);
+    configureOutboundIds({ maxItems: 100_000, ttlMs: 60 * 60 * 1000 });
     clearOutboundIds();
     rememberOutboundId("gone");
     clearRecentMessages();
     equal("clearing the content cache clears outbound ids", isOutboundId("gone"), false);
+  }
+
+  section("evicted content keeps its outbound id and rejects the notify echo");
+  {
+    clearOutboundIds();
+    configureRecentCache({ maxItems: 1 });
+    const kept = text(`kept-${++sequence}`);
+    rememberOutboundId(kept.key.id);
+    rememberMessage(kept.key, kept.message);
+    rememberMessage(text(`other-${++sequence}`).key, { conversation: "other" });
+    equal("content cache dropped the body", await getMessageFromRecent(kept.key), undefined);
+    equal("outbound id survived the content eviction", isOutboundId(kept.key.id), true);
+    const intake = createReactionIntake({ user: { id: bot } }, { now: () => clock });
+    intake.open();
+    clock += 2000;
+    kept.messageTimestamp = Math.floor(clock / 1000);
+    intake.observeUpsert({ type: "notify", messages: [kept] });
+    equal("retained outbound id is not an original", intake.stats().items, 0);
+    intake.close();
+    configureRecentCache({ maxItems: 500, maxBytes: 8 * 1024 * 1024 });
+    clearOutboundIds();
   }
 
   section("linked originals need inbound notify provenance");
@@ -308,6 +335,43 @@ try {
       ],
     });
     equal("inbound notify reaction is accepted", intake.observeReactions([live]).length, 1);
+
+    const foldedId = `folded-${++sequence}`;
+    const folded = text(`folded-original-${++sequence}`, {
+      key: { remoteJid: group, fromMe: false, participant: author },
+    });
+    clock += 1;
+    const foldedResult = intake.observeUpsert({
+      type: "notify",
+      messages: [
+        {
+          ...folded,
+          reactions: [
+            {
+              text: "😀",
+              senderTimestampMs: clock,
+              key: { remoteJid: group, id: foldedId, fromMe: true, participant: bot },
+            },
+          ],
+        },
+      ],
+    });
+    equal("folded reaction without its own notify is rejected", foldedResult.length, 0);
+
+    const lidOnly = "201070000051@lid";
+    enable(lidOnly);
+    const lidBefore = intake.stats().items;
+    intake.observeUpsert({
+      type: "notify",
+      messages: [
+        {
+          key: { remoteJid: lidOnly, id: `lid-dm-${++sequence}`, fromMe: false },
+          messageTimestamp: Math.floor(clock / 1000),
+          message: { conversation: "no-pn" },
+        },
+      ],
+    });
+    equal("LID DM without identity evidence is rejected", intake.stats().items, lidBefore);
     intake.close();
   }
 
@@ -321,9 +385,85 @@ try {
     replay.observeUpsert({ type: "notify", messages: [stale] });
     equal("replay older than open is rejected", replay.stats().items, 0);
     clock += 2000;
-    replay.observeUpsert({ type: "notify", messages: [text("after-open")] });
+    const after = text("after-open", {
+      key: { remoteJid: group, fromMe: false, participant: author },
+    });
+    replay.observeUpsert({ type: "notify", messages: [after] });
     equal("a notify after open is retained", replay.stats().items, 1);
+    const lateId = `late-${++sequence}`;
+    const openedAt = 1_800_000_000_000;
+    replay.observeUpsert({
+      type: "notify",
+      messages: [
+        {
+          key: { remoteJid: group, id: lateId, fromMe: true, participant: bot },
+          messageTimestamp: Math.floor(clock / 1000),
+          message: { reactionMessage: { text: "😀", key: after.key } },
+        },
+      ],
+    });
+    equal(
+      "delayed reaction envelope after restart is rejected",
+      replay.observeReactions([
+        {
+          key: after.key,
+          reaction: {
+            text: "😀",
+            senderTimestampMs: openedAt - 1000,
+            key: { remoteJid: group, id: lateId, fromMe: true, participant: bot },
+          },
+        },
+      ]).length,
+      0,
+    );
     replay.close();
+  }
+
+  section("a saturated id store rejects a linked reaction");
+  {
+    clearOutboundIds();
+    const now = Date.now();
+    configureOutboundIds({ maxItems: 1, ttlMs: 60 * 60 * 1000 });
+    rememberOutboundId("held", now);
+    equal("overflow does not evict the held id", rememberOutboundId("overflow", now), false);
+    equal("overflow sets the saturated flag", outboundIdsSaturated(), true);
+    const saturated = createReactionIntake({ user: { id: bot } }, { now: () => clock });
+    saturated.open();
+    clock += 2000;
+    const peer = text(`peer-sat-${++sequence}`, {
+      key: { remoteJid: group, fromMe: false, participant: author },
+    });
+    saturated.observeUpsert({ type: "notify", messages: [peer] });
+    equal("a peer original is still cached while saturated", saturated.stats().items, 1);
+    clock += 1;
+    const reactionId = `sat-${++sequence}`;
+    saturated.observeUpsert({
+      type: "notify",
+      messages: [
+        {
+          key: { remoteJid: group, id: reactionId, fromMe: true, participant: bot },
+          messageTimestamp: Math.floor(clock / 1000),
+          message: { reactionMessage: { text: "😀", key: peer.key } },
+        },
+      ],
+    });
+    equal(
+      "saturation rejects the linked reaction",
+      saturated.observeReactions([
+        {
+          key: peer.key,
+          reaction: {
+            text: "😀",
+            senderTimestampMs: clock,
+            key: { remoteJid: group, id: reactionId, fromMe: true, participant: bot },
+          },
+        },
+      ]).length,
+      0,
+    );
+    saturated.close();
+    configureOutboundIds({ maxItems: 100_000, ttlMs: 60 * 60 * 1000 });
+    clearOutboundIds();
   }
 } finally {
   finish();

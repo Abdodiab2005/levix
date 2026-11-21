@@ -105,7 +105,7 @@ const TABLE = {
   tts: quote(),
   "group:kick": destructive(),
 
-  gemini: args([FIELD.prompt], { quote: true }),
+  gemini: unsupported("NOT_IN_5_0_1"),
   "group:note": args([FIELD.keyword]),
   prayer: args([FIELD.city]),
   weather: args([FIELD.city]),

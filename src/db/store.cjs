@@ -979,11 +979,22 @@ function acceptableMappingSide(value, suffix) {
   return /^\d{1,30}$/.test(local);
 }
 
+// Raw event text, before roleJid. A non-numeric device suffix must not
+// disappear inside normalizeJid, and a bare phone is not a PN JID.
+const RAW_MAPPING_JID = /^(\d{1,30})(?::(\d{1,3}))?@(lid|s\.whatsapp\.net)$/;
+
+function rawMappingJid(value, domain) {
+  if (typeof value !== "string") return false;
+  const match = RAW_MAPPING_JID.exec(value.trim());
+  return Boolean(match && match[3] === domain);
+}
+
 // Baileys rc14 emits { lid, pn } or an array of those. Older builds emit a
 // map of lid -> pn. A pair is stored only when both sides are real JIDs.
 function lidMappingsFromUpdate(updates) {
   const mappings = [];
   const push = (lid, pn) => {
+    if (!rawMappingJid(lid, "lid") || !rawMappingJid(pn, "s.whatsapp.net")) return;
     if (!acceptableMappingSide(lid, "@lid") || !acceptableMappingSide(pn, "@s.whatsapp.net"))
       return;
     mappings.push({ lid: roleJid(lid), pn: roleJid(pn), deviceIndex: 0 });

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { deserialize, serialize } from "node:v8";
 import { sameUser } from "../utils/permissions.esm.js";
-import { isOutboundId } from "../utils/recentMessageCache.esm.js";
+import { isOutboundId, outboundIdsSaturated } from "../utils/recentMessageCache.esm.js";
 
 const require = createRequire(import.meta.url);
 const store = require("../db/store.cjs");
@@ -133,11 +133,16 @@ function messageKey(key, sock, enforce) {
   const fromMe = key.fromMe === true;
   const group = chat.endsWith("@g.us");
   // A DM alt that is missing, not a user JID, or not part of this chat's
-  // verified expansion is an unresolved PN/LID identity.
-  if (!group && key?.remoteJidAlt != null) {
-    const expanded = expand(chat, key.remoteJidAlt);
-    const alt = user(key.remoteJidAlt);
-    if (!expanded.length || !alt || !expanded.includes(alt)) return null;
+  // verified expansion is an unresolved PN/LID identity. A LID chat with no
+  // phone counterpart has no identity evidence at all.
+  if (!group) {
+    const expanded = expand(chat, key?.remoteJidAlt);
+    if (chat.endsWith("@lid") && !expanded.some((id) => id.endsWith("@s.whatsapp.net")))
+      return null;
+    if (key?.remoteJidAlt != null) {
+      const alt = user(key.remoteJidAlt);
+      if (!expanded.length || !alt || !expanded.includes(alt)) return null;
+    }
   }
   let author;
   let participant;
@@ -166,6 +171,7 @@ function messageKey(key, sock, enforce) {
   }
   const linked = fromMe || isLinkedActor(sock, author);
   if (enforce && linked) {
+    if (outboundIdsSaturated()) return null;
     const stamp = enforce.timestampMs;
     if (enforce.inbound !== true || !Number.isSafeInteger(stamp) || stamp < enforce.connectionAt)
       return null;
@@ -418,8 +424,9 @@ export function createReactionIntake(
         for (const reaction of msg.reactions) folded.push({ key: msg.key, reaction });
       }
     }
-    // Baileys can fold dedicated reactions into an original's buffered upsert.
-    return observeReactions(folded, type === "notify" ? "notify" : undefined);
+    // A folded reaction does not inherit the original's notify label. Its own
+    // stanza id has to have been noted as notify.
+    return observeReactions(folded);
   }
   function observeUpdates(updates) {
     if (!Array.isArray(updates)) return;
@@ -443,14 +450,14 @@ export function createReactionIntake(
         if (key?.id) invalidate(key.remoteJid, key.id);
     }
   }
-  function reaction(entry, sourceType) {
+  function reaction(entry) {
     if (!active || !linkedIdsFor(sock).length) return null;
     // The original was vetted when it was cached. Re-checking its provenance
     // here would drop it. Outbound ids are still rejected.
     const originalKey = messageKey(entry?.key, sock);
     const actorId = entry?.reaction?.key?.id;
     const noted = typeof actorId === "string" ? provenance.get(actorId) : undefined;
-    const inbound = sourceType === "notify" || noted === "notify";
+    const inbound = noted === "notify";
     const timestampMs = numberOf(entry?.reaction?.senderTimestampMs);
     const actorKey = messageKey(entry?.reaction?.key, sock, {
       inbound,
@@ -533,12 +540,12 @@ export function createReactionIntake(
     onTransition(value);
     return value;
   }
-  function observeReactions(entries, sourceType) {
+  function observeReactions(entries) {
     if (!Array.isArray(entries)) return [];
     sweep();
     return entries
       .slice(0, limits.maxBatch)
-      .map((entry) => reaction(entry, sourceType))
+      .map((entry) => reaction(entry))
       .filter(Boolean);
   }
   function close() {

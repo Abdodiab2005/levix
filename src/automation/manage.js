@@ -245,6 +245,7 @@ function prepareWrite(definition) {
     return definition;
   }
   if (!Object.hasOwn(clone, "transitions")) clone.transitions = ["add"];
+  if (definitionIssues(clone).length) return clone;
   return normalizeDefinition(clone);
 }
 
