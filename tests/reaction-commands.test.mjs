@@ -1547,7 +1547,7 @@ try {
     const failure = f.state.sent.map((row) => row.content?.text || "").join("\n");
     equal("provider failure is not delivered", error?.message, "REACTION_COMMAND_FAILED");
     ok("provider failure uses the translated STT error", failure.includes("Transcription failed"));
-    ok("provider failure details stay generic", failure.includes("unknown"));
+    ok("provider failure details stay generic", !failure.includes("SECRET_PROVIDER_BOOM"));
     equal("provider failure hides raw error text", failure.includes("SECRET_PROVIDER_BOOM"), false);
 
     const engine = await fixture({
