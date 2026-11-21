@@ -745,4 +745,61 @@ try {
   scheduler.scheduleJobNow = realScheduleJobNow;
 }
 
+section("tool errors returned to the model drop provider bodies");
+{
+  const { toolErrorForModel } = require("./src/services/aiTools.cjs");
+  const leak = "sk-FAKEKEY999 https://evil.example/leak?key=sk-FAKEKEY999 at run (/tmp/x.js:4:1)";
+  const original = TOOLS.calculate.run;
+  try {
+    TOOLS.calculate.run = async () => {
+      throw new Error(leak);
+    };
+    const thrown = await runTool("calculate", { expression: "1+1" }, {});
+    equal("a thrown provider body becomes TOOL_FAILED", thrown.code, "TOOL_FAILED");
+    equal(
+      "a thrown provider body uses the fixed message",
+      thrown.error,
+      "The tool could not complete this request.",
+    );
+    ok("a thrown result has no fake key", !JSON.stringify(thrown).includes("sk-FAKEKEY999"));
+    ok("a thrown result has no leak URL", !JSON.stringify(thrown).includes("evil.example"));
+
+    TOOLS.calculate.run = async () => ({ error: leak, detail: leak });
+    const returned = await runTool("calculate", { expression: "1+1" }, {});
+    equal("a returned provider body becomes TOOL_FAILED", returned.code, "TOOL_FAILED");
+    ok("a returned result has no fake key", !JSON.stringify(returned).includes("sk-FAKEKEY999"));
+    ok("a returned result has no leak URL", !JSON.stringify(returned).includes("https://"));
+
+    TOOLS.calculate.run = async () => ({ error: "expression is required" });
+    equal(
+      "a short validation string stays",
+      (await runTool("calculate", { expression: "1+1" }, {})).error,
+      "expression is required",
+    );
+    TOOLS.calculate.run = async () => ({ error: "at_time must be HH:mm" });
+    equal(
+      "at_time is not treated as a stack frame",
+      (await runTool("calculate", { expression: "1+1" }, {})).error,
+      "at_time must be HH:mm",
+    );
+    TOOLS.calculate.run = async () => ({ error: "ask-me later" });
+    equal(
+      "ask- is not treated as a secret token",
+      (await runTool("calculate", { expression: "1+1" }, {})).error,
+      "ask-me later",
+    );
+  } finally {
+    TOOLS.calculate.run = original;
+  }
+
+  const timeout = toolErrorForModel(new Error("calculate took longer than 30 seconds"));
+  equal("a deadline sentence stays", timeout.error, "calculate took longer than 30 seconds");
+  ok("a deadline sentence has no TOOL_FAILED code", timeout.code === undefined);
+  const leakedTimeout = toolErrorForModel(
+    new Error("calculate took longer than 30 seconds https://evil.example/slow"),
+  );
+  equal("a deadline that includes a URL is replaced", leakedTimeout.code, "TOOL_FAILED");
+  ok("that URL is not returned", !JSON.stringify(leakedTimeout).includes("evil.example"));
+}
+
 finish();

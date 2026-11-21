@@ -1467,6 +1467,61 @@ function declaredArgs(tool, args) {
   return Object.freeze(out);
 }
 
+const TOOL_FAILED_MESSAGE = "The tool could not complete this request.";
+
+// A provider body, a URL, a stack frame, or a secret-shaped token must never
+// be handed back to the model. Short validation strings stay as they are.
+function leaksProviderDetail(text) {
+  const value = String(text ?? "");
+  if (value.length > 240) return true;
+  if (/https?:\/\//i.test(value)) return true;
+  if (/\bat\s+\S+:\d+/.test(value)) return true;
+  if (/[{}]/.test(value)) return true;
+  if (/\bbearer\b|\bsk-[A-Za-z0-9]|AIza|api[_-]?key|\bkey=/i.test(value)) return true;
+  return false;
+}
+
+function toolErrorForModel(err) {
+  const message =
+    typeof err?.message === "string" ? err.message : typeof err === "string" ? err : "";
+  if (message && !leaksProviderDetail(message)) {
+    const code =
+      typeof err?.code === "string" && err.code && !leaksProviderDetail(err.code) ? err.code : "";
+    return code ? { error: message, code } : { error: message };
+  }
+  return { error: TOOL_FAILED_MESSAGE, code: "TOOL_FAILED" };
+}
+
+function scrubToolResult(result) {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return result;
+  if (result.denied || result.code === "DENIED") return result;
+  if (typeof result.error !== "string" || !leaksProviderDetail(result.error)) return result;
+  return { error: TOOL_FAILED_MESSAGE, code: "TOOL_FAILED" };
+}
+
+/** Mark a provider error thrown after at least one tool in this turn executed. */
+function markToolsRan(error) {
+  if (error && typeof error === "object") {
+    try {
+      error.toolsRan = true;
+      return error;
+    } catch {
+      // A frozen provider error cannot be tagged in place.
+    }
+  }
+  const wrapped = new Error(
+    typeof error?.message === "string" ? error.message : String(error || ""),
+  );
+  wrapped.toolsRan = true;
+  if (error && typeof error === "object") {
+    for (const key of ["status", "statusCode", "code", "details", "statusText", "error"]) {
+      if (error[key] !== undefined) wrapped[key] = error[key];
+    }
+    wrapped.cause = error;
+  }
+  return wrapped;
+}
+
 /**
  * Run one tool call. Never throws — a failure comes back as `{ error }` so the
  * model can apologise or try something else instead of the turn dying.
@@ -1517,7 +1572,7 @@ async function runTool(name, args, ctx) {
       globalMemory: () => globalMemoryAccess(ctx),
       deliveryGuard,
     });
-    return result && typeof result === "object" ? result : { result };
+    return scrubToolResult(result && typeof result === "object" ? result : { result });
   } catch (err) {
     if (err?.code === "DENIED") {
       logger.info({ tool: name }, "[aiTools] tool delivery refused");
@@ -1528,8 +1583,10 @@ async function runTool(name, args, ctx) {
         sent: false,
       };
     }
-    logger.warn({ err: err?.message, tool: name }, "[aiTools] tool call failed");
-    return { error: `${err?.name || "Error"}: ${err?.message || err}` };
+    const safe = toolErrorForModel(err);
+    // The local log keeps the real reason; only the model sees the sanitized one.
+    logger.warn({ err: err?.message, tool: name, code: safe.code }, "[aiTools] tool call failed");
+    return safe;
   }
 }
 
@@ -1564,6 +1621,9 @@ module.exports = {
   describeCall,
   runTool,
   runToolWithDeadline,
+  toolErrorForModel,
+  scrubToolResult,
+  markToolsRan,
   transcriptFromHistory,
   factsFromSummary,
   summarizeWithProvider,

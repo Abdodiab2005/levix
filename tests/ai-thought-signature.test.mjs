@@ -1,5 +1,5 @@
 // Thought-signature lifecycle, one-shot recovery, memory batch stripping,
-// provider/model provenance sanitization, and sanitized WhatsApp error cards.
+// signature stripping when Gemini settings change, and sanitized WhatsApp error cards.
 
 import {
   errorReply,
@@ -25,6 +25,8 @@ import {
 useTempDataDir("levix-thought-signature");
 
 const settings = harnessRequire("./src/config/settings.cjs");
+// Registers the gemini_model / base URL / API key listener that strips signatures.
+harnessRequire("./src/services/settingsTransfer.cjs");
 const store = harnessRequire("./src/db/store.cjs");
 const { q } = harnessRequire("./src/db/db.cjs");
 const permissions = harnessRequire("./src/utils/permissions.cjs");
@@ -32,7 +34,7 @@ await permissions.primePermissions();
 const aiAgent = harnessRequire("./src/services/aiAgent.cjs");
 const geminiCommand = harnessRequire("./src/commands/gemini.cjs");
 const { stripMemoryToolParts } = harnessRequire("./src/services/memoryPolicy.cjs");
-const { withLang } = harnessRequire("./src/utils/i18n.cjs");
+const { t, withLang } = harnessRequire("./src/utils/i18n.cjs");
 const { timing } = await import("../src/utils/sendBotMessage.esm.js");
 timing.sleep = async () => {};
 
@@ -183,8 +185,10 @@ await withGeminiServer(
     ok("stored history has the new turn", savedJson.includes("fresh answer"));
     ok("stored history has no stale signatures", !savedJson.includes("stale-sig-recover"));
     ok("stored history has no prior functionCall", !savedJson.includes("functionCall"));
-    equal("stored history records provider provenance", saved.provider, "gemini");
-    equal("stored history records model provenance", saved.model, "gemini-3.7-flash");
+    ok("stored history is a plain array", Array.isArray(saved));
+    ok("stored history has no provider stamp", saved.provider === undefined);
+    const raw = q("SELECT history FROM ai_history WHERE chat_id = ?").get(chatId).history;
+    ok("disk history is a JSON array", raw.startsWith("["));
   },
 );
 
@@ -398,7 +402,7 @@ section(
 // ---------------------------------------------------------------------------
 
 section(
-  "history stored by openai provider is sanitized before first Gemini send; same provider+model replays signatures byte-exact",
+  "openai function calls stay in the first Gemini request; a model change strips signatures once and keeps the calls",
 );
 {
   const chatId = "201000000106@s.whatsapp.net";
@@ -429,14 +433,18 @@ section(
   }
 
   const storedAfterOpenAI = store.getChatHistory(chatId);
-  equal("stored history recorded openai provider", storedAfterOpenAI.provider, "openai");
-  equal("stored history recorded openai model", storedAfterOpenAI.model, "gpt-5.4-mini");
+  ok("stored openai history is a plain array", Array.isArray(storedAfterOpenAI));
+  ok("stored openai history has no provider stamp", storedAfterOpenAI.provider === undefined);
+  ok("stored openai history has no model stamp", storedAfterOpenAI.model === undefined);
+  const rawOpenAI = q("SELECT history FROM ai_history WHERE chat_id = ?").get(chatId).history;
+  ok("stored openai history is a JSON array on disk", rawOpenAI.startsWith("["));
   ok(
     "stored openai history contains unsigned canonical functionCall",
-    JSON.stringify(storedAfterOpenAI).includes("functionCall"),
+    rawOpenAI.includes("functionCall"),
   );
 
-  // Switch to Gemini: must sanitize before the very first send.
+  // A provider switch no longer drops function calls. Signatures stay until a
+  // Gemini model, endpoint, or API key change.
   const exactGeminiSig = "gemini-sig-byte-exact-ABC123xyz==";
   await withGeminiServer(
     [
@@ -463,22 +471,21 @@ section(
       const firstGeminiContents = fake.body(0)?.contents || [];
       const firstGeminiJson = JSON.stringify(firstGeminiContents);
       ok(
-        "unsigned openai functionCall was stripped BEFORE the first Gemini send",
-        !firstGeminiJson.includes("call_openai_1") && !firstGeminiJson.includes("functionCall"),
+        "unsigned openai functionCall is still in the first Gemini request",
+        firstGeminiJson.includes("call_openai_1") && firstGeminiJson.includes("functionCall"),
       );
       ok(
-        "openai functionResponse was stripped BEFORE the first Gemini send",
-        !firstGeminiJson.includes("functionResponse"),
+        "openai functionResponse is still in the first Gemini request",
+        firstGeminiJson.includes("functionResponse"),
       );
       equal(
         "plain user text from openai turn was kept",
         firstGeminiContents[0]?.parts?.[0]?.text,
         "check time on openai",
       );
-      equal(
+      ok(
         "plain model text from openai turn was kept",
-        firstGeminiContents[1]?.parts?.[0]?.text,
-        "OpenAI answered with a tool",
+        firstGeminiJson.includes("OpenAI answered with a tool"),
       );
 
       // Next turn on the SAME provider (gemini) and SAME model (gemini-3.7-flash):
@@ -496,40 +503,86 @@ section(
 
       equal("second Gemini turn sent 1 request", fake.requests.length, 3);
       const replayContents = fake.body(2)?.contents || [];
-      const replayCallTurn = replayContents.find((turn) =>
-        (turn.parts || []).some((part) => part.functionCall),
-      );
-      ok("same provider and model replayed the prior tool turn unchanged", Boolean(replayCallTurn));
-      equal(
-        "replayed thoughtSignature is byte-exact",
-        replayCallTurn?.parts?.[0]?.thoughtSignature,
-        exactGeminiSig,
+      const signed = replayContents
+        .flatMap((turn) => turn.parts || [])
+        .find((part) => part.thoughtSignature === exactGeminiSig);
+      ok("same model replayed the signed tool turn", Boolean(signed?.functionCall));
+      equal("replayed thoughtSignature is byte-exact", signed?.thoughtSignature, exactGeminiSig);
+
+      const rawBeforeChange = q("SELECT history FROM ai_history WHERE chat_id = ?").get(
+        chatId,
+      ).history;
+      ok(
+        "stored signature is present before the setting change",
+        rawBeforeChange.includes(exactGeminiSig),
       );
 
-      // Now change gemini_model: the next turn must sanitize history from the old model before sending.
-      settings.set("gemini_model", "gemini-3.1-pro-preview");
-      await withLang("en", () =>
-        geminiCommand.execute(
-          sock,
-          makeMessage(chatId, "!ai after model change"),
-          ["after", "model", "change"],
-          "!ai after model change",
-          null,
-          { invokedName: "ai" },
-        ),
-      );
+      const realStrip = store.stripGeminiThoughtSignatures;
+      let strips = 0;
+      store.stripGeminiThoughtSignatures = function (...args) {
+        strips += 1;
+        return realStrip.apply(this, args);
+      };
+      try {
+        settings.set("link_previews_enabled", true);
+        equal("an unrelated setting does not strip", strips, 0);
+        equal(
+          "an unrelated setting keeps the stored JSON byte-exact",
+          q("SELECT history FROM ai_history WHERE chat_id = ?").get(chatId).history,
+          rawBeforeChange,
+        );
+        settings.set("link_previews_enabled", false);
 
-      equal("third Gemini turn sent 1 request", fake.requests.length, 4);
-      const afterModelChangeJson = JSON.stringify(fake.body(3)?.contents || []);
-      ok(
-        "changing gemini_model sanitized prior model's signed tool calls before first send",
-        !afterModelChangeJson.includes(exactGeminiSig) &&
-          !afterModelChangeJson.includes("functionCall"),
-      );
-      ok(
-        "plain text turns survived the gemini_model change",
-        afterModelChangeJson.includes("Gemini turn 2 done"),
-      );
+        settings.set("gemini_model", "gemini-3.1-pro-preview");
+        equal("changing gemini_model strips once", strips, 1);
+
+        await withLang("en", () =>
+          geminiCommand.execute(
+            sock,
+            makeMessage(chatId, "!ai after model change"),
+            ["after", "model", "change"],
+            "!ai after model change",
+            null,
+            { invokedName: "ai" },
+          ),
+        );
+
+        equal("third Gemini turn sent 1 request", fake.requests.length, 4);
+        const afterModelChangeJson = JSON.stringify(fake.body(3)?.contents || []);
+        ok(
+          "the next request has no thoughtSignature",
+          !afterModelChangeJson.includes("thoughtSignature") &&
+            !afterModelChangeJson.includes(exactGeminiSig),
+        );
+        ok(
+          "function calls survive the model change",
+          afterModelChangeJson.includes("functionCall"),
+        );
+        ok(
+          "function responses survive the model change",
+          afterModelChangeJson.includes("functionResponse"),
+        );
+        ok(
+          "plain text turns survived the gemini_model change",
+          afterModelChangeJson.includes("Gemini turn 2 done"),
+        );
+
+        await withLang("en", () =>
+          geminiCommand.execute(
+            sock,
+            makeMessage(chatId, "!ai once more"),
+            ["once", "more"],
+            "!ai once more",
+            null,
+            { invokedName: "ai" },
+          ),
+        );
+        equal("a later message does not strip again", strips, 1);
+        settings.set("gemini_model", "gemini-3.1-pro-preview");
+        equal("setting the current model does not strip", strips, 1);
+      } finally {
+        store.stripGeminiThoughtSignatures = realStrip;
+      }
     },
   );
 
@@ -542,20 +595,87 @@ section(
   );
   const legacyLoaded = store.getChatHistory(legacyChatId);
   equal("legacy array row loads turns", legacyLoaded.length, 1);
-  equal("legacy array row has null provider (unknown)", legacyLoaded.provider, null);
-  equal("legacy array row has null model (unknown)", legacyLoaded.model, null);
+  ok("legacy array row has no provider stamp", legacyLoaded.provider === undefined);
+  ok("legacy array row has no model stamp", legacyLoaded.model === undefined);
+
+  const wrappedChatId = "201000000198@s.whatsapp.net";
+  store.saveChatHistory(wrappedChatId, {
+    provider: "gemini",
+    model: "gemini-3.7-flash",
+    history: [
+      { role: "user", parts: [{ text: "wrapped user" }] },
+      {
+        role: "model",
+        parts: [{ functionCall: { name: "get_datetime", args: {} }, thoughtSignature: "wrap-sig" }],
+      },
+      {
+        role: "user",
+        parts: [{ functionResponse: { name: "get_datetime", response: { ok: true } } }],
+      },
+    ],
+  });
+  const wrappedRaw = q("SELECT history FROM ai_history WHERE chat_id = ?").get(
+    wrappedChatId,
+  ).history;
+  ok("saving a wrapper writes an array", wrappedRaw.startsWith("["));
+  const wrappedLoaded = store.getChatHistory(wrappedChatId);
+  equal("wrapper input loads as the inner turns", wrappedLoaded.length, 3);
+  ok("loaded wrapper has no provider stamp", wrappedLoaded.provider === undefined);
+
+  q("INSERT OR REPLACE INTO ai_history (chat_id, history, updated_at) VALUES (?, ?, ?)").run(
+    wrappedChatId,
+    JSON.stringify({
+      provider: "gemini",
+      model: "gemini-3.7-flash",
+      history: [
+        { role: "user", parts: [{ text: "wrapped user" }] },
+        {
+          role: "model",
+          parts: [
+            { functionCall: { name: "get_datetime", args: {} }, thoughtSignature: "wrap-sig" },
+          ],
+        },
+        {
+          role: "user",
+          parts: [{ functionResponse: { name: "get_datetime", response: { ok: true } } }],
+        },
+      ],
+    }),
+    Date.now(),
+  );
+  const reread = store.getChatHistory(wrappedChatId);
+  equal("a stored wrapper still loads its turns", reread.length, 3);
+  ok("a stored wrapper read has no provider stamp", reread.provider === undefined);
+  settings.set("gemini_model", "gemini-3.8-flash");
+  const strippedRaw = q("SELECT history FROM ai_history WHERE chat_id = ?").get(
+    wrappedChatId,
+  ).history;
+  ok("a setting change rewrites the wrapper as an array", strippedRaw.startsWith("["));
+  ok(
+    "a setting change drops thought signatures",
+    !strippedRaw.includes("wrap-sig") && !strippedRaw.includes("thoughtSignature"),
+  );
+  ok("a setting change keeps the function call", strippedRaw.includes("functionCall"));
+  ok("a setting change keeps the function response", strippedRaw.includes("functionResponse"));
+  ok("a setting change keeps the text", strippedRaw.includes("wrapped user"));
 }
 
 // ---------------------------------------------------------------------------
 // 7. WhatsApp error text for each error class has no "{", no "INVALID_ARGUMENT", no API key fragment
 // ---------------------------------------------------------------------------
 
-section(
-  "WhatsApp error text for every error class in all locales has no JSON, status token or key leak",
-);
+section("WhatsApp error text for every error class in all locales is the exact translation");
 {
   const secretKey = "AIzaSySuperSecretKeyFragment998877";
   settings.set("gemini_api_key", secretKey);
+  const classKeys = {
+    signature: "bot.ai.gemini.errorThoughtSignature",
+    quota: "bot.ai.gemini.errorQuota",
+    apiKey: "bot.ai.gemini.errorApiKey",
+    safety: "bot.ai.gemini.errorSafety",
+    unavailable: "bot.ai.gemini.errorUnavailable",
+    generic: "bot.ai.gemini.errorGeneric",
+  };
 
   const errorCases = [
     {
@@ -618,35 +738,320 @@ section(
         const chatId = `2010000099${errorCases.findIndex((c) => c.expectedKind === expectedKind)}@s.whatsapp.net`;
         const sock = makeSocket();
 
-        await withLang(locale, () =>
-          geminiCommand.execute(
+        await withLang(locale, async () => {
+          await geminiCommand.execute(
             sock,
             makeMessage(chatId, "!ai test error card"),
             ["test", "error", "card"],
             "!ai test error card",
             null,
             { invokedName: "ai" },
-          ),
-        );
-
-        const text = sock.sent.at(-1)?.text || "";
-        ok(`${expectedKind}/${locale}: error message sent`, text.length > 0);
-        ok(`${expectedKind}/${locale}: contains no "{"`, !text.includes("{"));
-        ok(`${expectedKind}/${locale}: contains no "}"`, !text.includes("}"));
-        ok(
-          `${expectedKind}/${locale}: contains no "INVALID_ARGUMENT"`,
-          !text.includes("INVALID_ARGUMENT"),
-        );
-        ok(
-          `${expectedKind}/${locale}: contains no API key fragment`,
-          !text.includes("AIzaSy") && !text.includes("SuperSecretKeyFragment"),
-        );
-        ok(
-          `${expectedKind}/${locale}: contains no raw catalog key`,
-          !text.includes("bot.ai.") && !text.includes("bot.core."),
-        );
+          );
+          const text = sock.sent.at(-1)?.text || "";
+          const expected = settings
+            .redactSecrets(
+              t("bot.core.statusMessage.errorCard", {
+                lead: t("bot.ai.gemini.chatFailed"),
+                name: "Error",
+                message: t(classKeys[expectedKind]),
+              }),
+            )
+            .slice(0, 1500);
+          equal(`${expectedKind}/${locale}: exact translated card`, text, expected);
+          ok(`${expectedKind}/${locale}: contains no "{"`, !text.includes("{"));
+          ok(`${expectedKind}/${locale}: contains no "}"`, !text.includes("}"));
+          ok(
+            `${expectedKind}/${locale}: contains no "INVALID_ARGUMENT"`,
+            !text.includes("INVALID_ARGUMENT"),
+          );
+          ok(
+            `${expectedKind}/${locale}: contains no API key fragment`,
+            !text.includes("AIzaSy") && !text.includes("SuperSecretKeyFragment"),
+          );
+          ok(
+            `${expectedKind}/${locale}: contains no raw catalog key`,
+            !text.includes("bot.ai.") && !text.includes("bot.core."),
+          );
+        });
       });
     }
+  }
+}
+
+section("thought-signature rejection matches explicit wording only");
+{
+  const accept = [
+    "Invalid thought signature.",
+    "The thought signature is not valid",
+    "Function call is missing a thought_signature.",
+    "missing thought signature in contents",
+    "Thought signature was issued by an unavailable route",
+  ];
+  for (const message of accept) {
+    ok(
+      message,
+      aiAgent.isThoughtSignatureError(Object.assign(new Error(message), { status: 400 })),
+    );
+  }
+  ok(
+    "a 400 that only echoes the field name is not a rejection",
+    !aiAgent.isThoughtSignatureError(
+      Object.assign(
+        new Error(
+          "Invalid value at contents[0].parts[0].thoughtSignature: echoed from the user prompt",
+        ),
+        { status: 400 },
+      ),
+    ),
+  );
+  ok(
+    "a 500 that quotes the phrase is not a signature error",
+    !aiAgent.isThoughtSignatureError(
+      Object.assign(new Error("Invalid thought signature."), { status: 500 }),
+    ),
+  );
+}
+
+section("a stale file reference is positive, and a bare 404 is not");
+{
+  const sent = [
+    {
+      fileData: {
+        fileUri: "https://generativelanguage.googleapis.com/v1beta/files/sentfile1",
+      },
+    },
+  ];
+  ok(
+    "bare 404 is not a file reference",
+    !aiAgent.isFileReferenceError(Object.assign(new Error("Not Found"), { status: 404 })),
+  );
+  ok(
+    "permission_denied alone is not a file reference",
+    !aiAgent.isFileReferenceError(Object.assign(new Error("PERMISSION_DENIED"), { status: 403 })),
+  );
+  ok(
+    "failed_precondition alone is not a file reference",
+    !aiAgent.isFileReferenceError(Object.assign(new Error("FAILED_PRECONDITION"), { status: 400 })),
+  );
+  ok(
+    "file expired is a file reference",
+    aiAgent.isFileReferenceError(Object.assign(new Error("file expired"), { status: 404 })),
+  );
+  ok(
+    "a files id this turn sent is a file reference",
+    aiAgent.isFileReferenceError(
+      Object.assign(new Error("https://generativelanguage.googleapis.com/v1beta/files/sentfile1"), {
+        status: 404,
+      }),
+      sent,
+    ),
+  );
+  ok(
+    "a different files id is not a file reference",
+    !aiAgent.isFileReferenceError(
+      Object.assign(new Error("https://generativelanguage.googleapis.com/v1beta/files/otherfile"), {
+        status: 404,
+      }),
+      sent,
+    ),
+  );
+}
+
+section("a 400 that echoes thoughtSignature is not retried");
+{
+  await withGeminiServer(
+    [
+      errorReply(
+        400,
+        "Invalid value at contents[0].parts[0].thoughtSignature: echoed from the user prompt",
+      ),
+      textReply("must not retry"),
+    ],
+    async (fake) => {
+      const chatId = "201000000181@s.whatsapp.net";
+      store.saveChatHistory(chatId, priorToolHistory("sig-echo-field"));
+      const sock = makeSocket();
+      await withLang("en", async () => {
+        await geminiCommand.execute(
+          sock,
+          makeMessage(chatId, "!ai echo"),
+          ["echo"],
+          "!ai echo",
+          null,
+          { invokedName: "ai" },
+        );
+        const text = sock.sent.at(-1)?.text || "";
+        const expected = settings
+          .redactSecrets(
+            t("bot.core.statusMessage.errorCard", {
+              lead: t("bot.ai.gemini.chatFailed"),
+              name: "Error",
+              message: t("bot.ai.gemini.errorGeneric"),
+            }),
+          )
+          .slice(0, 1500);
+        equal("one request only", fake.requests.length, 1);
+        equal("generic card, not the signature class", text, expected);
+        ok("the field echo is not in the chat", !text.includes("thoughtSignature"));
+      });
+    },
+  );
+}
+
+section("a bare 404 before any tool is not recovered");
+{
+  await withGeminiServer(
+    [errorReply(404, "Not Found"), textReply("must not retry")],
+    async (fake) => {
+      const chatId = "201000000182@s.whatsapp.net";
+      const sock = makeSocket();
+      await withLang("en", () =>
+        geminiCommand.execute(
+          sock,
+          makeMessage(chatId, "!ai missing"),
+          ["missing"],
+          "!ai missing",
+          null,
+          {
+            invokedName: "ai",
+          },
+        ),
+      );
+      equal("bare 404 is not retried", fake.requests.length, 1);
+    },
+  );
+}
+
+section("a positive stale file error before any tool retries once");
+{
+  const fileUri = "https://generativelanguage.googleapis.com/v1beta/files/sentfile1";
+  await withGeminiServer(
+    [errorReply(404, "file expired"), textReply("recovered without the file")],
+    async (fake) => {
+      const chatId = "201000000183@s.whatsapp.net";
+      store.saveChatHistory(chatId, [
+        { role: "user", parts: [{ text: "look", fileData: { fileUri, mimeType: "image/jpeg" } }] },
+        { role: "model", parts: [{ text: "saw it" }] },
+      ]);
+      const sock = makeSocket();
+      await withLang("en", () =>
+        geminiCommand.execute(
+          sock,
+          makeMessage(chatId, "!ai again"),
+          ["again"],
+          "!ai again",
+          null,
+          {
+            invokedName: "ai",
+          },
+        ),
+      );
+      equal("file expiry retries once", fake.requests.length, 2);
+      const second = JSON.stringify(fake.body(1)?.contents || []);
+      ok(
+        "retry dropped the file part",
+        !second.includes("fileData") && !second.includes("sentfile1"),
+      );
+      ok(
+        "the recovered answer was delivered",
+        (sock.sent.at(-1)?.text || "").includes("recovered without the file"),
+      );
+    },
+  );
+}
+
+section("a tool that already ran is not executed again when the provider returns 404");
+{
+  const scheduler = harnessRequire("./scheduler.cjs");
+  const realScheduleJobNow = scheduler.scheduleJobNow;
+  let reminders = 0;
+  scheduler.scheduleJobNow = () => {
+    reminders += 1;
+    return { ok: true };
+  };
+  const fileUri = "https://generativelanguage.googleapis.com/v1beta/files/sentfile1";
+  try {
+    await withGeminiServer(
+      [
+        functionCallReply([
+          { name: "create_reminder", args: { message: "stand up", in_minutes: 5 } },
+        ]),
+        errorReply(404, `File ${fileUri} not found`),
+        textReply("must not rerun"),
+      ],
+      async (fake) => {
+        const chatId = OWNER;
+        store.deleteChatHistory(chatId);
+        store.saveChatHistory(chatId, [
+          {
+            role: "user",
+            parts: [{ text: "photo", fileData: { fileUri, mimeType: "image/jpeg" } }],
+          },
+          { role: "model", parts: [{ text: "noted" }] },
+        ]);
+        const sock = makeSocket();
+        await withLang("en", () =>
+          geminiCommand.execute(
+            sock,
+            makeMessage(chatId, "!ai remind me"),
+            ["remind", "me"],
+            "!ai remind me",
+            null,
+            { invokedName: "ai" },
+          ),
+        );
+        equal("initial request plus the tool result, and no rerun", fake.requests.length, 2);
+        equal("create_reminder ran once", reminders, 1);
+      },
+    );
+  } finally {
+    scheduler.scheduleJobNow = realScheduleJobNow;
+  }
+}
+
+section("a tool failure does not send the provider body to the model or the chat");
+{
+  const { TOOLS } = harnessRequire("./src/services/aiTools.cjs");
+  const original = TOOLS.calculate.run;
+  const leak = "sk-FAKEKEY999 https://evil.example/leak?key=sk-FAKEKEY999 at run (/tmp/x.js:4:1)";
+  TOOLS.calculate.run = async () => {
+    throw new Error(leak);
+  };
+  try {
+    await withGeminiServer(
+      [
+        functionCallReply([{ name: "calculate", args: { expression: "1+1" } }]),
+        textReply("calculated"),
+      ],
+      async (fake) => {
+        const chatId = "201000000184@s.whatsapp.net";
+        const sock = makeSocket();
+        await withLang("en", () =>
+          geminiCommand.execute(
+            sock,
+            // "add" is the batch sub-command; any other word reaches the model.
+            makeMessage(chatId, "!ai compute"),
+            ["compute"],
+            "!ai compute",
+            null,
+            { invokedName: "ai" },
+          ),
+        );
+        equal("tool result was sent once", fake.requests.length, 2);
+        const wire = JSON.stringify(fake.body(1) || {});
+        ok("the fake key never reaches the model", !wire.includes("sk-FAKEKEY999"));
+        ok("the leak URL never reaches the model", !wire.includes("evil.example"));
+        ok(
+          "the model receives the fixed tool error",
+          wire.includes("TOOL_FAILED") || wire.includes("could not complete"),
+        );
+        const chat = sock.sent.map((entry) => entry.text).join("\n");
+        ok("the fake key never reaches the chat", !chat.includes("sk-FAKEKEY999"));
+        ok("the leak URL never reaches the chat", !chat.includes("evil.example"));
+      },
+    );
+  } finally {
+    TOOLS.calculate.run = original;
   }
 }
 

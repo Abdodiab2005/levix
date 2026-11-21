@@ -246,3 +246,12 @@ module.exports = {
   applyImport,
   applySettingChange,
 };
+
+// A Gemini thought signature is valid only for the model, endpoint and project
+// that issued it. Panel saves, imports and backup restore all apply settings
+// here, and set() notifies commands that write a setting directly.
+const GEMINI_SIGNATURE_SETTINGS = new Set(["gemini_model", "gemini_base_url", "gemini_api_key"]);
+settings.onChange((key) => {
+  if (!GEMINI_SIGNATURE_SETTINGS.has(key)) return;
+  require("../db/store.cjs").stripGeminiThoughtSignatures();
+});
