@@ -717,6 +717,28 @@ try {
       equal("creds.me.name is fifth in chain", (await harness.service.get()).name, "Creds Me Name");
     }
 
+    // 6. PN row "New" is preferred over earlier-sorting LID row "Old"
+    {
+      const earlierLid = "1234567890@lid"; // Sorts before PHONE_ID ("201234567890@s.whatsapp.net")
+      const linkedAliases = identity({
+        phone: PHONE_ID,
+        lid: earlierLid,
+        selfJids: [earlierLid, PHONE_ID],
+      });
+      const aliasNames = new Map([
+        [earlierLid, "Old"],
+        [PHONE_ID, "New"],
+      ]);
+      const { socket } = fakeSocket({ id: earlierLid, name: "Socket Name" });
+      const harness = makeService({
+        socket,
+        id: linkedAliases,
+        options: { getUserDisplayName: (jid) => aliasNames.get(jid) || null },
+      });
+      const profile = await harness.service.get();
+      equal("PN row 'New' is preferred over earlier-sorting LID row 'Old'", profile.name, "New");
+    }
+
     // Unrelated account after switch does not inherit previous account's creds/metadata
     {
       const otherLid = "111222333444555@lid";

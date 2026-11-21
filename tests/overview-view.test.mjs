@@ -294,35 +294,49 @@ section("OverviewView summary load generation fencing");
     "overview fences loading and refreshing state to latest generation",
     overview.includes("if (summaryGenerationRef.current === generation)"),
   );
+  ok(
+    "latest generation clears both loading and refreshing in finally",
+    overview.includes("setLoading(false)") &&
+      overview.includes("setRefreshing(false)") &&
+      !overview.includes("if (isRefresh) setRefreshing(false)"),
+  );
 
   // Pure logic simulation of out-of-order async responses:
-  // Request 1 starts (gen 1, slower mount/refresh)
-  // Request 2 starts (gen 2, faster reconnect/refresh)
-  // Request 2 completes first and sets state for Gen 2
-  // Request 1 completes later: its results, error toast, and loading state update are dropped
+  // Request 1 starts as manual refresh (gen 1, isRefresh=true, slower mount/refresh)
+  // Request 2 starts as reconnect load (gen 2, isRefresh=false, faster reconnect)
+  // Request 2 completes first and sets state for Gen 2, clearing loading AND refreshing in finally
+  // Request 1 completes later: its results, error toast, and flag updates are dropped
   let genCounter = 0;
   let appliedGen = null;
   let appliedTotal = null;
   let loadingState = false;
+  let refreshingState = false;
   let toastError = null;
 
-  const simulateLoad = async (gen, total, shouldError, delayMs) => {
+  const simulateLoad = async (gen, isRefresh, total, shouldError, delayMs) => {
     loadingState = true;
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
-    if (genCounter !== gen) return; // Stale generation fenced
-    if (shouldError) {
-      toastError = "Failed";
-    } else {
-      appliedGen = gen;
-      appliedTotal = total;
+    if (isRefresh) refreshingState = true;
+    try {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      if (genCounter !== gen) return; // Stale generation fenced
+      if (shouldError) {
+        toastError = "Failed";
+      } else {
+        appliedGen = gen;
+        appliedTotal = total;
+      }
+    } finally {
+      if (genCounter === gen) {
+        loadingState = false;
+        refreshingState = false;
+      }
     }
-    loadingState = false;
   };
 
   const g1 = ++genCounter;
-  const p1 = simulateLoad(g1, 10, true, 40); // earlier request that fails slowly
+  const p1 = simulateLoad(g1, true, 10, true, 40); // manual refresh (isRefresh=true) that is slow
   const g2 = ++genCounter;
-  const p2 = simulateLoad(g2, 25, false, 10); // newer request that succeeds quickly
+  const p2 = simulateLoad(g2, false, 25, false, 10); // reconnect load (isRefresh=false) superseding gen 1
 
   await Promise.all([p1, p2]);
 
@@ -330,6 +344,7 @@ section("OverviewView summary load generation fencing");
   equal("applied total is from newest (gen 2)", appliedTotal, 25);
   equal("stale error from older generation was suppressed", toastError, null);
   equal("loading state is cleared after newest generation completes", loadingState, false);
+  equal("refreshing state is cleared by winning latest generation", refreshingState, false);
 }
 
 section("countActiveSchedules and countOpenTodos compute full totals before bounding");

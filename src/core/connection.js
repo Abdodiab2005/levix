@@ -271,29 +271,45 @@ export function updateOwnerDisplayName(sock, candidate) {
 
 // Record the paired WhatsApp account as the bot's first owner. Whoever scanned
 // the QR owns the bot — there is no owner list to configure anywhere.
-async function saveBotOwnerMetadata(sock, pushNameOverride = null) {
+export async function saveBotOwnerMetadata(sock, pushNameOverride = null) {
   try {
     logger.info("[User Metadata] Saving bot owner metadata...");
 
     const { phoneNumber, userJid, userLid } = resolveOwnerSocketIds(sock);
-    const displayName =
-      cleanOwnerName(pushNameOverride) ||
-      cleanOwnerName(sock?.user?.name) ||
-      cleanOwnerName(sock?.user?.verifiedName) ||
-      cleanOwnerName(sock?.user?.notify) ||
-      null;
-
     const primaryJid = userJid || userLid;
-    if (primaryJid) {
-      saveUserMetadata({
-        jid: primaryJid,
-        lid: userLid,
-        phone: phoneNumber,
-        isOwner: true,
-        displayName,
-      });
-      logger.info(`[User Metadata] Saved bot owner: ${maskAccount({ pn: userJid, lid: userLid })}`);
+    if (!primaryJid) return;
+
+    const trustedOverride = cleanOwnerName(pushNameOverride);
+    let displayName = trustedOverride;
+
+    if (!displayName) {
+      // On connection open, write the owner display name from socket or credential
+      // names only when no trusted owner display name is stored yet; a stored name
+      // from a live notify message is never replaced by the socket or creds name.
+      const existing = getUserMetadata(primaryJid, { exact: true });
+      const storedName =
+        cleanOwnerName(existing?.displayName) ||
+        (userLid ? cleanOwnerName(getUserMetadata(userLid, { exact: true })?.displayName) : null);
+
+      if (storedName) {
+        displayName = storedName;
+      } else {
+        displayName =
+          cleanOwnerName(sock?.user?.name) ||
+          cleanOwnerName(sock?.user?.verifiedName) ||
+          cleanOwnerName(sock?.user?.notify) ||
+          null;
+      }
     }
+
+    saveUserMetadata({
+      jid: primaryJid,
+      lid: userLid,
+      phone: phoneNumber,
+      isOwner: true,
+      displayName,
+    });
+    logger.info(`[User Metadata] Saved bot owner: ${maskAccount({ pn: userJid, lid: userLid })}`);
   } catch (err) {
     logger.error({ err }, "[Error] Failed to save bot owner metadata");
   }

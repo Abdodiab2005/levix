@@ -166,7 +166,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
       } finally {
         if (summaryGenerationRef.current === generation) {
           setLoading(false);
-          if (isRefresh) setRefreshing(false);
+          setRefreshing(false);
         }
       }
     },
