@@ -1917,5 +1917,6 @@
   "plusPresetFunDesc": "Respuestas cálidas y animadas con un tono amigable.",
   "plusExtErrorConflict": "La configuración de respuesta automática cambió en otra pestaña o dispositivo. Se cargó la configuración más reciente.",
   "plusAutoReplyApply": "Aplicar",
-  "overviewRefresh": "Actualizar resumen"
+  "overviewRefresh": "Actualizar resumen",
+  "overviewStatsTitle": "De un vistazo"
 }

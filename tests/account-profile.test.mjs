@@ -627,7 +627,7 @@ try {
   }
 
   section(
-    "name fallback chain: user.name -> verifiedName -> notify -> creds.me.name -> user_metadata",
+    "name fallback chain: stored metadata -> user.name -> verifiedName -> notify -> creds.me.name",
   );
   {
     const lidId = "987654321098765@lid";
@@ -639,9 +639,9 @@ try {
     });
     const storedNames = new Map([[PHONE_ID, "Stored Metadata Name"]]);
 
-    // 1. sock.user.name wins first
+    // 1. stored user_metadata displayName is preferred over socket.user.name when socket.user.name differs
     {
-      const { socket } = fakeSocket({ id: lidId, name: "Socket Name" });
+      const { socket } = fakeSocket({ id: lidId, name: "Differing Socket Name" });
       socket.user.verifiedName = "Verified Biz Name";
       socket.user.notify = "Notify Push Name";
       const harness = makeService({
@@ -649,10 +649,31 @@ try {
         id: linked,
         options: { getUserDisplayName: (jid) => storedNames.get(jid) || null },
       });
-      equal("user.name wins", (await harness.service.get()).name, "Socket Name");
+      equal(
+        "stored metadata name is preferred when socket.user.name differs",
+        (await harness.service.get()).name,
+        "Stored Metadata Name",
+      );
     }
 
-    // 2. sock.user.verifiedName when user.name is missing or '~'
+    // 2. fresh install with no stored name falls back to socket.user.name
+    {
+      const { socket } = fakeSocket({ id: lidId, name: "Socket Name" });
+      socket.user.verifiedName = "Verified Biz Name";
+      socket.user.notify = "Notify Push Name";
+      const harness = makeService({
+        socket,
+        id: linked,
+        options: { getUserDisplayName: () => null },
+      });
+      equal(
+        "fresh install with no stored name falls back to socket.user.name",
+        (await harness.service.get()).name,
+        "Socket Name",
+      );
+    }
+
+    // 3. sock.user.verifiedName when stored name is missing and user.name is missing or '~'
     {
       const { socket } = fakeSocket({ id: lidId, name: "~" });
       socket.user.verifiedName = "Verified Biz Name";
@@ -660,7 +681,7 @@ try {
       const harness = makeService({
         socket,
         id: linked,
-        options: { getUserDisplayName: (jid) => storedNames.get(jid) || null },
+        options: { getUserDisplayName: () => null },
       });
       equal(
         "verifiedName is used when user.name is placeholder '~'",
@@ -669,56 +690,31 @@ try {
       );
     }
 
-    // 3. sock.user.notify when user.name and verifiedName are missing
+    // 4. sock.user.notify when stored name, user.name and verifiedName are missing
     {
       const { socket } = fakeSocket({ id: lidId, name: null });
       socket.user.notify = "Notify Push Name";
       const harness = makeService({
         socket,
         id: linked,
-        options: { getUserDisplayName: (jid) => storedNames.get(jid) || null },
+        options: { getUserDisplayName: () => null },
       });
       equal(
-        "user.notify is third in chain",
+        "user.notify is fourth in chain",
         (await harness.service.get()).name,
         "Notify Push Name",
       );
     }
 
-    // 4. saved credentials' me.name when socket has no name fields
+    // 5. saved credentials' me.name when stored name and socket name fields are missing
     {
       const { socket } = fakeSocket({ id: lidId, name: null });
       const harness = makeService({
         socket,
         id: linked,
-        options: { getUserDisplayName: (jid) => storedNames.get(jid) || null },
+        options: { getUserDisplayName: () => null },
       });
-      equal(
-        "creds.me.name is fourth in chain",
-        (await harness.service.get()).name,
-        "Creds Me Name",
-      );
-    }
-
-    // 5. user_metadata displayName when socket and creds have no name
-    {
-      const { socket } = fakeSocket({ id: lidId, name: null });
-      const noCredName = identity({
-        phone: PHONE_ID,
-        lid: lidId,
-        name: null,
-        selfJids: [PHONE_ID, lidId],
-      });
-      const harness = makeService({
-        socket,
-        id: noCredName,
-        options: { getUserDisplayName: (jid) => storedNames.get(jid) || null },
-      });
-      equal(
-        "user_metadata displayName is fifth in chain",
-        (await harness.service.get()).name,
-        "Stored Metadata Name",
-      );
+      equal("creds.me.name is fifth in chain", (await harness.service.get()).name, "Creds Me Name");
     }
 
     // Unrelated account after switch does not inherit previous account's creds/metadata

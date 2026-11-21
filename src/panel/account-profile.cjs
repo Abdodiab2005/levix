@@ -179,18 +179,20 @@ function createAccountProfile({
       }
     }
 
+    // Preferred: trusted stored owner display name in user_metadata (written once on
+    // connection open or via live notify messages, avoiding Baileys replay mutations).
     // Fallback chain:
-    // 1. sock.user.name
-    // 2. sock.user.verifiedName
-    // 3. sock.user.notify
-    // 4. saved credentials' me.name
-    // 5. linked account's own display name in user_metadata
+    // 1. linked account's own display name in user_metadata
+    // 2. sock.user.name (fallback on fresh install before metadata write)
+    // 3. sock.user.verifiedName
+    // 4. sock.user.notify
+    // 5. saved credentials' me.name
     const name = selfId
-      ? cleanProfileName(socket?.user?.name) ||
+      ? cleanProfileName(resolveStoredDisplayName(raw, identity, acceptedIds, matchesIdentity)) ||
+        cleanProfileName(socket?.user?.name) ||
         cleanProfileName(socket?.user?.verifiedName) ||
         cleanProfileName(socket?.user?.notify) ||
         cleanProfileName(resolveCredsName(raw, identity, acceptedIds, matchesIdentity)) ||
-        cleanProfileName(resolveStoredDisplayName(raw, identity, acceptedIds, matchesIdentity)) ||
         null
       : null;
 

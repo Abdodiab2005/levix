@@ -38,6 +38,15 @@ section("connection.js registers no socket listeners of its own");
   const source = readFileSync(new URL("../src/core/connection.js", import.meta.url), "utf8");
   equal("no ev.on in connection.js", /\bev\.on\(|\.ev\.on\(/.test(source), false);
   equal("bindOwnerDisplayName removed", source.includes("bindOwnerDisplayName"), false);
+
+  const eventsSource = readFileSync(new URL("../src/core/events.js", import.meta.url), "utf8");
+  equal(
+    "no ownerName listener on creds.update in events.js",
+    /listen\(\s*sock\.ev,\s*["']creds\.update["'],\s*\(update\)\s*=>\s*ownerName/.test(
+      eventsSource,
+    ),
+    false,
+  );
 }
 
 section("owner name updates through setupEventListeners without touching role flags");
@@ -83,6 +92,17 @@ section("owner name updates through setupEventListeners without touching role fl
   });
   meta = store.getUserMetadata(OWNER_JID);
   equal("append upsert with an older pushName changes nothing", meta.displayName, "First Update");
+
+  // 1c. A creds.update with an older name after a notify message leaves the stored name unchanged
+  sock.ev.emit("creds.update", {
+    me: { id: OWNER_JID, name: "Older Creds Name" },
+  });
+  meta = store.getUserMetadata(OWNER_JID);
+  equal(
+    "creds.update with an older name leaves the stored name unchanged",
+    meta.displayName,
+    "First Update",
+  );
 
   // 2. JID-shaped pushName is rejected
   sock.ev.emit("messages.upsert", {

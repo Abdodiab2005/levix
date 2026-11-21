@@ -1922,6 +1922,7 @@ const en = {
   plusExtErrorConflict: "Auto Reply settings changed in another tab or device. The latest settings were loaded.",
   plusAutoReplyApply: "Apply",
   overviewRefresh: "Refresh overview",
+  overviewStatsTitle: "At a glance",
 };
 
 export type MessageKey = keyof typeof en;
@@ -3852,6 +3853,7 @@ export const translations: {
     plusExtErrorConflict: "تغيرت إعدادات الرد التلقائي في علامة تبويب أخرى أو جهاز آخر. تم تحميل أحدث الإعدادات.",
     plusAutoReplyApply: "تطبيق",
     overviewRefresh: "تحديث النظرة العامة",
+    overviewStatsTitle: "لمحة سريعة",
   },
   en,
   "pt-BR": {
@@ -5774,6 +5776,7 @@ export const translations: {
     plusExtErrorConflict: "As configurações de resposta automática mudaram em outra guia ou dispositivo. As configurações mais recentes foram carregadas.",
     plusAutoReplyApply: "Aplicar",
     overviewRefresh: "Atualizar visão geral",
+    overviewStatsTitle: "Em um relance",
   },
   "es-419": {
     tabBackup: "Copia de seguridad y restauración",
@@ -7695,6 +7698,7 @@ export const translations: {
     plusExtErrorConflict: "La configuración de respuesta automática cambió en otra pestaña o dispositivo. Se cargó la configuración más reciente.",
     plusAutoReplyApply: "Aplicar",
     overviewRefresh: "Actualizar resumen",
+    overviewStatsTitle: "De un vistazo",
   },
 };
 

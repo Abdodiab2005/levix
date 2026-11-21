@@ -245,7 +245,7 @@ try {
       lid: LID_ID,
       phone: "201234567890",
       isOwner: true,
-      displayName: "Stored Owner PushName",
+      displayName: null,
     });
 
     // 1. verifiedName fallback
@@ -297,18 +297,25 @@ try {
     p = (await res.json()).profile;
     equal("panel uses saved creds.me.name fallback", p.name, "Saved Creds Name");
 
-    // 4. user_metadata displayName fallback + photo retry from LID to verified PN
+    // 4. stored owner displayName in user_metadata is preferred over socket and creds names
+    store.saveUserMetadata({
+      jid: PHONE_ID,
+      lid: LID_ID,
+      phone: "201234567890",
+      isOwner: true,
+      displayName: "Stored Owner PushName",
+    });
     store.authWrite(
       "creds",
       JSON.stringify({
         registered: true,
-        me: { id: PHONE_ID, lid: LID_ID },
+        me: { id: PHONE_ID, lid: LID_ID, name: "Replayed Creds Name" },
       }),
     );
     const photoAttempts = [];
     setSession(
       connectedSession({
-        user: { id: LID_ID, name: null },
+        user: { id: LID_ID, name: "Mutated Replay Socket Name" },
         async profilePictureUrl(jid) {
           photoAttempts.push(jid);
           if (jid === PHONE_ID) return PHOTO_URL;
@@ -321,7 +328,11 @@ try {
     );
     res = await http.call("/dashboard/api/account/profile");
     p = (await res.json()).profile;
-    equal("panel uses user_metadata display_name fallback", p.name, "Stored Owner PushName");
+    equal(
+      "panel prefers stored owner display_name when socket name differs",
+      p.name,
+      "Stored Owner PushName",
+    );
     equal(
       "panel retries photo with verified PN when LID fails",
       photoAttempts.join(","),
@@ -392,7 +403,8 @@ try {
       equal(`rejects server profile name "${invalidName}"`, p.name, "Stored Owner PushName");
     }
 
-    // Valid name passes through
+    // Fresh install with no stored name still falls back to socket.user.name
+    store.clearUserMetadata();
     setSession(
       connectedSession({
         user: { id: PHONE_ID, name: "Valid Operator Name" },
@@ -407,6 +419,30 @@ try {
     res = await http.call("/dashboard/api/account/profile");
     p = (await res.json()).profile;
     equal("accepts valid server profile name", p.name, "Valid Operator Name");
+
+    // Profile returns stored name when socket.user.name differs
+    store.saveUserMetadata({
+      jid: PHONE_ID,
+      displayName: "Stored Trusted Owner",
+    });
+    setSession(
+      connectedSession({
+        user: { id: PHONE_ID, name: "Mutated Replay Socket Name" },
+        async profilePictureUrl() {
+          return null;
+        },
+        async fetchStatus() {
+          return [];
+        },
+      }),
+    );
+    res = await http.call("/dashboard/api/account/profile");
+    p = (await res.json()).profile;
+    equal(
+      "profile returns stored name when socket.user.name differs",
+      p.name,
+      "Stored Trusted Owner",
+    );
   }
 } catch (error) {
   ok("account profile panel tests run", false, error?.stack || String(error));
