@@ -89,7 +89,12 @@ section("stored message types round-trip without silently expanding");
     JSON.stringify(draftToWrite(loaded)),
     JSON.stringify(payload),
   );
-  const voice = { ...payload.definition, action: "stt", originalTypes: ["voice"] };
+  const voice = {
+    ...payload.definition,
+    command: { name: "stt", args: [] },
+    originalTypes: ["voice"],
+  };
+  delete voice.action;
   equal(
     "STT keeps stored voice",
     JSON.stringify(draftFromRule(stored(voice)).originalTypes),

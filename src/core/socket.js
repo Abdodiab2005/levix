@@ -1,4 +1,5 @@
 import { makeWASocket } from "@whiskeysockets/baileys";
+import { generateMessageIDV2 } from "@whiskeysockets/baileys";
 import { createRequire } from "module";
 import { invalidateReactionMessage } from "../automation/reactions.js";
 import { useDatabaseAuthState } from "../auth/use-database-auth-state.js";
@@ -7,6 +8,7 @@ import {
   getMessageFromRecent,
   getRecentCacheEpoch,
   rememberMessage,
+  rememberOutboundId,
 } from "../utils/recentMessageCache.esm.js";
 
 const require = createRequire(import.meta.url);
@@ -137,6 +139,13 @@ export function withOutboundSavers(sock) {
     // No await between this check and Baileys: cancellation cannot retract a
     // send already initiated, but must prevent a new one after preparation.
     signal?.throwIfAborted();
+    // Assign the id before relay. rc14 can emit the local echo while
+    // sendMessage is still awaiting, and the content cache is written only
+    // after the promise resolves. A refused delivery guard never reaches here.
+    if (typeof wireOptions.messageId !== "string" || !wireOptions.messageId) {
+      wireOptions.messageId = generateMessageIDV2(sock.user?.id);
+    }
+    rememberOutboundId(wireOptions.messageId);
     const result = await original(jid, payload, wireOptions);
     try {
       if (

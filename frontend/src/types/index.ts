@@ -381,7 +381,13 @@ export type ReactionOriginalType =
   | "video"
   | "document"
   | "sticker";
-export type ReactionSenderRole = "any" | "owner" | "bot_admin" | "group_admin" | "member";
+export type ReactionSenderRole =
+  | "any"
+  | "owner"
+  | "bot_admin"
+  | "group_admin"
+  | "member"
+  | "owner_group_admin";
 export type ReactionAction = "stt" | "ping";
 export type ReactionDestinationMode = "same_chat" | "owner_private";
 export type ReactionStatusCode =
@@ -396,8 +402,13 @@ export type ReactionStatusCode =
   | "CANDIDATE_LIMIT"
   | "READY";
 
+export interface ReactionCommandRef {
+  name: string;
+  args: string[];
+}
+
 export interface ReactionDefinition {
-  version: 1;
+  version: 1 | 2;
   emoji: string;
   transitions: ReactionTransition[];
   originalTypes: ReactionOriginalType[];
@@ -405,10 +416,12 @@ export interface ReactionDefinition {
     role: ReactionSenderRole;
     ids: string[];
   };
-  action: ReactionAction;
+  action?: ReactionAction;
+  command?: ReactionCommandRef;
   destination: {
     mode: ReactionDestinationMode;
   };
+  allowOthersOnLinkedMessages?: boolean;
 }
 
 export interface ReactionRuntime {

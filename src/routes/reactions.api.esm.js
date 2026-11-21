@@ -29,6 +29,15 @@ router.get(
   "/reactions",
   route(() => manage.overview()),
 );
+router.get(
+  "/reactions/commands",
+  route((req) => {
+    const lang = req.query?.lang;
+    const allowed = new Set(["ar", "en", "pt-BR", "es-419"]);
+    const chosen = typeof lang === "string" && allowed.has(lang) ? lang : "en";
+    return { commands: manage.listCommands(chosen) };
+  }),
+);
 router.post(
   "/reactions/rules/check",
   route((req) => manage.checkDraft(req.body)),

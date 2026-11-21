@@ -298,4 +298,37 @@ for (const chatJid of [
   `1-${"2".repeat(31)}@g.us`,
 ])
   throws(`chat rejects ${chatJid}`, () => ruleJid(chatJid));
+
+section("owner and group admins is one sender role");
+const ownerGroupAdmin = {
+  version: 2,
+  emoji: "😀",
+  transitions: ["add"],
+  originalTypes: ["text"],
+  senders: { role: "owner_group_admin", ids: [] },
+  command: { name: "ping", args: [] },
+  destination: { mode: "same_chat" },
+};
+equal("v2 owner_group_admin has no issues", definitionIssues(ownerGroupAdmin).length, 0);
+ok("v2 owner_group_admin validates", accepts(validateDefinition, ownerGroupAdmin));
+equal(
+  "v1 owner_group_admin has no issues",
+  definitionIssues(definition({ senders: { role: "owner_group_admin", ids: [] } })).length,
+  0,
+);
+equal(
+  "v1 still rejects the linked-message flag",
+  definitionIssues(definition({ allowOthersOnLinkedMessages: false })).some(
+    (issue) =>
+      issue.field === "definition.allowOthersOnLinkedMessages" && issue.code === "unknown_field",
+  ),
+  true,
+);
+equal(
+  "v2 rejects a non-boolean linked-message flag",
+  definitionIssues({ ...ownerGroupAdmin, allowOthersOnLinkedMessages: "yes" }).some(
+    (issue) => issue.field === "definition.allowOthersOnLinkedMessages",
+  ),
+  true,
+);
 finish();

@@ -128,6 +128,12 @@ function stringList(value: unknown): string[] {
     : [];
 }
 
+function commandNameOf(definition: Record<string, unknown> | null): string {
+  const command = asRecord(definition?.command);
+  if (typeof command?.name === "string") return command.name;
+  return typeof definition?.action === "string" ? definition.action : "";
+}
+
 /** Untrusted stored definition: never throw, give Edit a replaceable draft. */
 export function draftFromRule(rule: ReactionRule): ReactionDraft {
   const definition = asRecord(rule.definition);
@@ -140,7 +146,7 @@ export function draftFromRule(rule: ReactionRule): ReactionDraft {
     (item): item is ReactionOriginalType => (ORIGINAL_TYPES as readonly string[]).includes(item),
   );
   const role = senders?.role;
-  const action = definition?.action;
+  const name = commandNameOf(definition);
   const mode = destination?.mode;
   return {
     chatJid: typeof rule.chatJid === "string" ? rule.chatJid : "",
@@ -150,14 +156,14 @@ export function draftFromRule(rule: ReactionRule): ReactionDraft {
     transitions: transitions.length ? transitions : ["add"],
     originalTypes: originalTypes.length
       ? originalTypes
-      : action === "stt"
+      : name === "stt"
         ? ["voice"]
         : [...ORIGINAL_TYPES],
     role: (SENDER_ROLES as readonly string[]).includes(role as string)
       ? (role as ReactionSenderRole)
       : "owner",
     senderIds: stringList(senders?.ids).slice(0, SENDERS_MAX),
-    action: action === "ping" || action === "stt" ? action : "",
+    action: name === "ping" || name === "stt" ? name : "",
     destination: mode === "owner_private" || mode === "same_chat" ? mode : "same_chat",
     priority: Number.isInteger(rule.priority) ? rule.priority : PRIORITY_DEFAULT,
   };
@@ -174,12 +180,12 @@ export function displayRuleMeta(rule: ReactionRule): {
   const senders = asRecord(definition?.senders);
   const destination = asRecord(definition?.destination);
   const emoji = definition?.emoji;
-  const action = definition?.action;
+  const action = commandNameOf(definition);
   const mode = destination?.mode;
   const role = senders?.role;
   return {
     emoji: typeof emoji === "string" && emoji ? emoji : rule.valid === false ? "?" : "—",
-    action: typeof action === "string" ? action : "",
+    action,
     destination: typeof mode === "string" ? mode : "",
     role: typeof role === "string" ? role : "",
   };
@@ -190,7 +196,7 @@ export function draftToWrite(draft: ReactionDraft): ReactionRuleWrite {
   const originalTypes =
     draft.action === "stt" ? (["voice"] as ReactionOriginalType[]) : [...draft.originalTypes];
   const definition: ReactionDefinition = {
-    version: 1,
+    version: 2,
     emoji: draft.emoji,
     transitions: [...draft.transitions],
     originalTypes,
@@ -198,7 +204,7 @@ export function draftToWrite(draft: ReactionDraft): ReactionRuleWrite {
       role: draft.role,
       ids: [...draft.senderIds],
     },
-    action: draft.action,
+    command: { name: draft.action, args: [] },
     destination: { mode: draft.destination },
   };
   return {
@@ -255,7 +261,7 @@ export function statusTone(code: string): "ok" | "warn" | "danger" | "neutral" {
 }
 
 export function ruleMatchesFilters(rule: ReactionRule, filters: ReactionFilters): boolean {
-  if (filters.action !== "any" && asRecord(rule.definition)?.action !== filters.action)
+  if (filters.action !== "any" && commandNameOf(asRecord(rule.definition)) !== filters.action)
     return false;
   const statuses = Array.isArray(rule.statuses) ? rule.statuses : [];
   if (filters.status === "ready") return statuses.includes("READY");

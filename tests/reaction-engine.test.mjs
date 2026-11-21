@@ -17,6 +17,9 @@ const stt = require("./src/commands/stt.cjs");
 const thumbnail = require("./src/utils/thumbnail.cjs");
 const { timing } = await import("../src/utils/sendBotMessage.esm.js");
 const { createReactionAutomation } = await import("../src/automation/engine.js");
+const { rememberMessage, rememberOutboundId, clearRecentMessages } = await import(
+  "../src/utils/recentMessageCache.esm.js"
+);
 const { resolveVerifiedSender } = await import("../src/middleware/permissions.middleware.js");
 const { validateDefinition } = require("./src/automation/rules.cjs");
 
@@ -478,7 +481,11 @@ try {
   store.saveUserMetadata({ jid: author, isOwner: true });
   runtime.setPermission("ping", "OWNER_ONLY");
   receive(f, remember(f));
-  equal("original author grants no reactor authority", await completed(f), "REACTION_FORBIDDEN");
+  equal(
+    "original author grants no reactor authority",
+    await completed(f),
+    "REACTION_COMMAND_DENIED",
+  );
   equal("author-owner cannot authorize ordinary reactor", f.state.sent.length, 0);
   f = await fixture({
     rules: [
@@ -491,7 +498,7 @@ try {
   equal("sender allowlist filters other participant", await completed(f), "NO_MATCH");
   runtime.setEnabled("ping", false);
   receive(f, remember(f));
-  equal("disabled backing command fails closed", await completed(f), "REACTION_FORBIDDEN");
+  equal("disabled backing command fails closed", await completed(f), "REACTION_COMMAND_DENIED");
 
   section("unmatched storms do no remote work; unauthorized matching attempts are bounded");
   const stormVoiceDefinition = definition({ action: "stt", originalTypes: ["voice"] });
@@ -518,7 +525,7 @@ try {
     equal(
       `unauthorized matching attempt ${i + 1} refuses permission`,
       await completed(f),
-      "REACTION_FORBIDDEN",
+      "REACTION_COMMAND_DENIED",
     );
   }
   equal("first three unauthorized matches each perform one metadata RPC", f.state.metadataCalls, 3);
@@ -548,7 +555,7 @@ try {
   equal(
     "numeric LID collision cannot execute owner action",
     await completed(f),
-    "REACTION_FORBIDDEN",
+    "REACTION_COMMAND_DENIED",
   );
   // New contact writes must not recreate the old numeric merge. Inject a
   // pre-existing contaminated column to retain coverage of legacy databases.
@@ -573,7 +580,7 @@ try {
   equal(
     "legacy contact merge cannot authorize an owner action",
     await completed(f),
-    "REACTION_FORBIDDEN",
+    "REACTION_COMMAND_DENIED",
   );
   store.storeLidPnMapping(lid, collision);
   equal(
@@ -845,7 +852,7 @@ try {
   equal(
     "demotion during preparation rechecked at actual send",
     await completed(f),
-    "REACTION_FORBIDDEN",
+    "REACTION_COMMAND_DENIED",
   );
   equal("revoked group admin cannot send", f.state.attempts.length, 0);
   ok("source membership refreshed after preparation", f.state.metadataCalls >= 3);
@@ -864,7 +871,7 @@ try {
   equal(
     "demotion during download prevents paid provider work",
     await completed(f),
-    "REACTION_FORBIDDEN",
+    "REACTION_COMMAND_DENIED",
   );
   equal("demoted reactor never starts transcription", transcribed, 0);
   f = await fixture();
@@ -923,12 +930,36 @@ try {
     },
     { message: { viewOnceMessage: { message: { conversation: "private" } } } },
     { message: { ephemeralMessage: { message: { conversation: "private" } } } },
-    { key: { remoteJid: group, id: `self-${++sequence}`, participant: bot, fromMe: true } },
   ]) {
     const before = f.engine.intake.stats().items;
     receive(f, remember(f, original(patch)));
     await completed(f);
-    equal("hidden/self/bot-origin input not retained", f.engine.intake.stats().items, before);
+    equal("hidden/bot-origin input not retained", f.engine.intake.stats().items, before);
+  }
+  {
+    const before = f.engine.intake.stats().items;
+    remember(
+      f,
+      original({
+        key: { remoteJid: group, id: `self-${++sequence}`, participant: bot, fromMe: true },
+      }),
+    );
+    equal("owner-typed fromMe original is retained", f.engine.intake.stats().items, before + 1);
+  }
+  {
+    const id = `levix-${++sequence}`;
+    rememberOutboundId(id);
+    const before = f.engine.intake.stats().items;
+    remember(f, original({ key: { remoteJid: group, id, participant: bot, fromMe: true } }));
+    equal("levix-sent original is not retained", f.engine.intake.stats().items, before);
+  }
+  {
+    const id = `cache-${++sequence}`;
+    rememberMessage({ remoteJid: group, id }, { conversation: "levix" });
+    const before = f.engine.intake.stats().items;
+    remember(f, original({ key: { remoteJid: group, id, participant: bot, fromMe: true } }));
+    equal("content cache alone retains a linked notify", f.engine.intake.stats().items, before + 1);
+    clearRecentMessages();
   }
   message = remember(f);
   receive(f, message, "😀", bot);

@@ -4,12 +4,12 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { checkBotAdmin, checkCommandPermission } from "../middleware/permissions.middleware.js";
 import { getCached, getRosterVersion, resolveGroupMetadata } from "../utils/groupMetadataCache.cjs";
-import { sendBotMessage } from "../utils/sendBotMessage.esm.js";
 import { accountEpoch as readAccountEpoch } from "../utils/storage.esm.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const require = createRequire(import.meta.url);
+const botSender = require("../utils/sendBotMessage.cjs");
 const logger = require("../utils/logger.cjs");
 const runtimeConfig = require("../config/runtime-config.cjs");
 const settings = require("../config/settings.cjs");
@@ -17,7 +17,8 @@ const { localize, allLanguages, attachCommandDocs } = require("../utils/commandD
 const { langForCommand, withLang, t } = require("../utils/i18n.cjs");
 const { parseCommandText, parseCommandTextV1 } = require("../messaging/parser.cjs");
 const { createMessage, renderMessage, stampWatermark } = require("../messaging/message.cjs");
-const { routeSend, canonicalJid } = require("../messaging/router.cjs");
+const { routeSend, planDelivery, canonicalJid } = require("../messaging/router.cjs");
+const { linkedIdentity } = require("../messaging/identity.cjs");
 const { withCommand } = require("../utils/commandContext.cjs");
 
 // Commands collection (keyed by both names and aliases)
@@ -64,32 +65,119 @@ const EDIT_IN_PLACE_EXCLUDE = new Set([
   "autodelete",
 ]);
 
+const REACTION_CONTROL_CODES = new Set([
+  "REACTION_CANCELLED",
+  "REACTION_TIMEOUT",
+  "REACTION_STALE",
+  "REACTION_INACCESSIBLE",
+  "REACTION_FORBIDDEN",
+  "REACTION_STT_DISABLED",
+  "REACTION_DELIVERY_REFUSED",
+  "REACTION_CAPACITY",
+  "REACTION_IDENTITY_INVALID",
+  "REACTION_VOICE_REQUIRED",
+  "REACTION_COMMAND_DENIED",
+  "REACTION_COMMAND_UNSUPPORTED",
+  "REACTION_COMMAND_FAILED",
+  "STT_KEY_REQUIRED",
+  "STT_OUTPUT_INVALID",
+  "MEDIA_AUDIO_INVALID",
+  "MEDIA_TOO_LARGE",
+  "MEDIA_NOT_AVAILABLE",
+  "MEDIA_URL_INVALID",
+  "INVOCATION_REFUSAL",
+  "DUPLICATE",
+  "EVENT_MISSING",
+  "RATE_LIMIT",
+  "CAPACITY",
+]);
+
+function sameTransportKey(left, right) {
+  if (!left || !right || left.id !== right.id) return false;
+  const a = canonicalJid(left.remoteJid) || left.remoteJid;
+  const b = canonicalJid(right.remoteJid) || right.remoteJid;
+  return Boolean(a) && a === b;
+}
+
+function controlError(code) {
+  const error = new Error(code);
+  error.code = code;
+  return error;
+}
+
+function planForSend(chatJid, jid, senderJid, commandName, levix, routeMode) {
+  if (routeMode) {
+    return planDelivery({
+      sourceJid: chatJid,
+      requestedJid: jid,
+      senderJid,
+      commandName,
+      routeMode,
+      overrides: { commands: {}, categories: {} },
+      sensitivity: levix?.sensitivity || "source",
+      terminal: levix?.terminal === true,
+      identity: routeMode === "same_chat" ? { selfJids: [] } : linkedIdentity(),
+    });
+  }
+  return routeSend({
+    sourceJid: chatJid,
+    requestedJid: jid,
+    senderJid,
+    commandName,
+    category: levix?.category || "result",
+    sensitivity: levix?.sensitivity || "source",
+    terminal: levix?.terminal === true,
+  });
+}
+
 // Wrap a socket so commands reply nicely:
 //   * `editInPlace` commands: the FIRST plain-text send to the command's own
 //     chat edits the original command message (only possible when the message
 //     is from us — `fromMe`). Falls back to a normal send if the edit fails or
 //     isn't allowed. Subsequent sends behave normally.
 //   * everything else: `sock.sendMessage(jid, content)` automatically adds
-//     `quoted: msg` so the reply threads under the command.
-// Every other method (groupMetadata, etc.) is forwarded untouched.
-function wrapSockWithReply(sock, originalMsg, editInPlace = false, commandName = "") {
+//     `quoted: replyAnchor` so the reply threads under the command.
+// A reaction never edits or deletes the protected original. Every other method
+// is forwarded untouched.
+function wrapSockWithReply(sock, originalMsg, options = {}) {
+  const editInPlace = options.editInPlace === true;
+  const replyAnchor = options.replyAnchor || originalMsg;
+  const protectedKeys = Array.isArray(options.protectedKeys) ? options.protectedKeys : [];
+  const commandName = options.commandName || "";
+  const silentDenials = options.silentDenials === true;
+  const routeMode = options.routeMode || null;
+  const reaction = options.source === "reaction";
+  const state = options.state || { attempted: 0 };
   const chatJid = originalMsg.key.remoteJid;
   const source = canonicalJid(chatJid) || chatJid;
+  const senderJid =
+    options.requester?.jid ||
+    options.senderJid ||
+    originalMsg.key.participant ||
+    originalMsg.key.remoteJid;
   const allowed = new Set([source]);
   let editUsed = false;
   let noticeSent = false;
 
-  return new Proxy(sock, {
+  const proxy = new Proxy(sock, {
     get(target, prop, receiver) {
       if (prop === "sendMessage") {
-        return async (jid, content, options) => {
-          const opts = options ? { ...options } : {};
-          const signal = opts.signal;
+        return async (jid, content, sendOptions) => {
+          const opts = sendOptions ? { ...sendOptions } : {};
+          const signal = opts.signal || options.signal;
           signal?.throwIfAborted();
           const levix = opts.levix || null;
           delete opts.levix;
 
           const requested = canonicalJid(jid) || source;
+          const protocolKey = content?.edit || content?.delete || null;
+          if (protocolKey && protectedKeys.some((key) => sameTransportKey(protocolKey, key))) {
+            logger.warn(
+              { command: commandName },
+              "[Command] refused edit or delete of a protected message",
+            );
+            return { key: null, refused: true };
+          }
           const protocol = Boolean(content && (content.edit || content.delete || content.react));
           if (protocol) {
             // An edit stays on a chat this command already sent to. It cannot
@@ -97,21 +185,14 @@ function wrapSockWithReply(sock, originalMsg, editInPlace = false, commandName =
             if (!allowed.has(requested)) return { key: null, refused: true };
             const outgoing =
               content.edit && levix ? stampText(content, commandName, levix) : content;
+            state.attempted += 1;
             return target.sendMessage.call(target, jid, outgoing, opts);
           }
 
-          const plan = routeSend({
-            sourceJid: chatJid,
-            requestedJid: jid,
-            senderJid: originalMsg.key.participant || originalMsg.key.remoteJid,
-            commandName,
-            category: levix?.category || "result",
-            sensitivity: levix?.sensitivity || "source",
-            terminal: levix?.terminal === true,
-          });
+          const plan = planForSend(chatJid, jid, senderJid, commandName, levix, routeMode);
 
           if (!plan.allow) {
-            if (!noticeSent) {
+            if (!silentDenials && !noticeSent) {
               noticeSent = true;
               const notice = renderMessage(
                 createMessage({
@@ -127,12 +208,13 @@ function wrapSockWithReply(sock, originalMsg, editInPlace = false, commandName =
                   target,
                   chatJid,
                   { text: notice, linkPreview: null },
-                  { quoted: originalMsg, ...(signal ? { signal } : {}) },
+                  { quoted: replyAnchor, ...(signal ? { signal } : {}) },
                 );
               } catch (error) {
                 logger.warn({ err: error?.message }, "[router] refusal notice failed");
               }
             }
+            if (reaction) throw controlError("REACTION_DELIVERY_REFUSED");
             return { key: null, refused: true };
           }
 
@@ -156,6 +238,7 @@ function wrapSockWithReply(sock, originalMsg, editInPlace = false, commandName =
           if (eligibleForEdit) {
             editUsed = true;
             try {
+              state.attempted += 1;
               return await target.sendMessage.call(
                 target,
                 chatJid,
@@ -167,12 +250,35 @@ function wrapSockWithReply(sock, originalMsg, editInPlace = false, commandName =
             }
           }
 
+          let quoted = opts.quoted;
+          if (
+            quoted === originalMsg ||
+            (quoted?.key && sameTransportKey(quoted.key, originalMsg.key))
+          )
+            quoted = replyAnchor;
           if (sameChat) {
-            if (opts.quoted === undefined) opts.quoted = originalMsg;
-          } else if ("quoted" in opts) {
-            delete opts.quoted;
+            if (quoted === undefined) quoted = replyAnchor;
+          } else {
+            quoted = undefined;
           }
+
           signal?.throwIfAborted();
+          state.attempted += 1;
+          if (reaction) {
+            if (options.deliveryGuard?.refresh) await options.deliveryGuard.refresh();
+            const sent = await botSender.sendBotMessage(target, plan.destination, outgoing, {
+              signal,
+              deliveryGuard: options.deliveryGuard,
+              replyTo: sameChat && plan.quote !== false ? quoted || replyAnchor : null,
+              quoted: sameChat && plan.quote !== false ? quoted || replyAnchor : null,
+              quote: sameChat && plan.quote !== false,
+              levix,
+            });
+            if (!sent?.key || sent.refused) throw controlError("REACTION_DELIVERY_REFUSED");
+            return sent;
+          }
+          if (sameChat) opts.quoted = quoted;
+          else if ("quoted" in opts) delete opts.quoted;
           const sent = await target.sendMessage.call(target, plan.destination, outgoing, opts);
           if (sent?.key && !sent.key.remoteJid) sent.key.remoteJid = plan.destination;
           return sent;
@@ -182,6 +288,7 @@ function wrapSockWithReply(sock, originalMsg, editInPlace = false, commandName =
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
+  return proxy;
 }
 
 function stampText(content, commandName, levix) {
@@ -400,7 +507,7 @@ export async function handleCommand(sock, msg, body, accountEpoch) {
         deliveryPolicy: { terminal: true },
       }),
     );
-    await sendBotMessage(sock, msg.key.remoteJid, { text }, { replyTo: msg });
+    await botSender.sendBotMessage(sock, msg.key.remoteJid, { text }, { replyTo: msg });
     return true;
   }
 
@@ -409,148 +516,216 @@ export async function handleCommand(sock, msg, body, accountEpoch) {
   // on the command's own keywords (see utils/i18n.cjs).
   const aliases = runtimeConfig.getAliases(command.name, command.__declaredAliases || []);
   const lang = langForCommand(command, args, aliases);
-  return withLang(lang, () =>
-    runCommand(sock, msg, body, {
+  return withLang(lang, async () => {
+    const outcome = await executeCommandInvocation(sock, {
       command,
-      args,
       invokedName,
+      args,
+      body,
+      msg,
       isGroup,
       rawRemainder: parsed.rawRemainder,
       accountEpoch: epoch,
+      options: {
+        source: "text",
+        editInPlace: !EDIT_IN_PLACE_EXCLUDE.has(command.name),
+        commandName: command.name,
+      },
+    });
+    if (outcome?.status === "failed") throw outcome.error;
+    return true;
+  });
+}
+
+function deny(status, reason) {
+  return { status, reason };
+}
+
+/**
+ * Sync command gates. Reaction delivery re-checks this after media preparation
+ * using the roster `refresh` just loaded. Typed commands call it after their
+ * own fresh roster read.
+ */
+export function evaluateCommandGates(sock, invocation, authMetadata) {
+  const { command, msg, isGroup, accountEpoch } = invocation;
+  const options = invocation.options || {};
+  if (!command || command.name === "group") {
+    if (readAccountEpoch() !== accountEpoch) return deny("stale", "account");
+    return { status: "ready" };
+  }
+  if (runtimeConfig.isDisabled(command.name)) return deny("disabled", "disabled");
+  const chatScope = (command.chat || "all").toLowerCase();
+  if (chatScope === "group" && !isGroup) return deny("denied", "scope");
+  if (chatScope === "private" && isGroup) return deny("denied", "scope");
+  const permissionKey = command.__category === "group" ? `group:${command.name}` : command.name;
+  const permissionCheck = checkCommandPermission(permissionKey, msg, authMetadata, sock);
+  if (!permissionCheck.hasPermission) return deny("denied", "permission");
+  if (command.userAdminRequired && !permissionCheck.isSenderAdmin) return deny("denied", "admin");
+  if (command.botAdminRequired && !checkBotAdmin(authMetadata, sock))
+    return deny("denied", "botAdmin");
+  if (readAccountEpoch() !== accountEpoch) return deny("stale", "account");
+  if (options.routeMode) {
+    const plan = planForSend(
+      msg.key.remoteJid,
+      msg.key.remoteJid,
+      options.requester?.jid || options.senderJid || msg.key.participant || msg.key.remoteJid,
+      command.name,
+      null,
+      options.routeMode,
+    );
+    if (!plan.allow) return deny("failed", "REACTION_DELIVERY_REFUSED");
+  }
+  return { status: "ready", permissionCheck };
+}
+
+async function explainDenial(sock, msg, anchor, status, reason) {
+  const key =
+    status === "disabled"
+      ? "bot.core.commandHandler.disabled"
+      : reason === "scope" && (msg.key.remoteJid || "").endsWith("@g.us")
+        ? "bot.core.commandHandler.privateOnly"
+        : reason === "scope"
+          ? "bot.core.commandHandler.groupsOnly"
+          : reason === "admin"
+            ? "bot.core.commandHandler.adminRequired"
+            : reason === "botAdmin"
+              ? "bot.core.commandHandler.botAdminRequired"
+              : null;
+  if (!key && reason === "permission") return;
+  const text = key ? t(key) : null;
+  if (!text) return;
+  await botSender.sendBotMessage(sock, msg.key.remoteJid, { text }, { replyTo: anchor || msg });
+}
+
+export async function executeCommandInvocation(sock, invocation) {
+  const options = invocation.options || {};
+  const source = options.source === "reaction" ? "reaction" : "text";
+  const silent = source === "reaction" || options.silentDenials === true;
+  const neutral = source === "reaction" || options.neutralFailure === true;
+  const command = invocation.command;
+  const msg = invocation.msg;
+  const isGroup = invocation.isGroup;
+  const accountEpoch = invocation.accountEpoch;
+  const invokedName = invocation.invokedName || command?.name || "";
+  const aliases = runtimeConfig.getAliases(command.name, command.__declaredAliases || []);
+  const lang = langForCommand(command, invocation.args || [], aliases);
+  return withLang(lang, () =>
+    runInvocation(sock, invocation, {
+      source,
+      silent,
+      neutral,
+      invokedName,
+      isGroup,
+      accountEpoch,
     }),
   );
 }
 
-async function runCommand(
-  sock,
-  msg,
-  body,
-  { command, args, invokedName, isGroup, rawRemainder, accountEpoch },
-) {
-  // Turned off from the dashboard. Answered rather than ignored so the user
-  // knows the command exists and isn't broken.
-  if (runtimeConfig.isDisabled(command.name)) {
-    await sendBotMessage(
-      sock,
-      msg.key.remoteJid,
-      { text: t("bot.core.commandHandler.disabled") },
-      { replyTo: msg },
-    );
-    return true;
+async function runInvocation(sock, invocation, flags) {
+  const { source, silent, neutral, invokedName, isGroup, accountEpoch } = flags;
+  const options = invocation.options || {};
+  const command = invocation.command;
+  const msg = invocation.msg;
+  const args = invocation.args || [];
+  const body = invocation.body;
+  const anchor = options.replyAnchor || msg;
+  let authMetadata = invocation.authMetadata;
+  if (!options.rosterReady && isGroup) {
+    authMetadata = await resolveGroupMetadata(sock, msg.key.remoteJid, { fresh: true });
   }
-
-  try {
-    // One read. Authorization uses a fresh or live roster and denies when the
-    // only copy is stale. The command body keeps the last known roster so a
-    // failed refresh still protects the last-known admins.
-    const jid = msg.key.remoteJid;
-    const authMetadata = isGroup ? await resolveGroupMetadata(sock, jid, { fresh: true }) : null;
-    const groupMetadata = isGroup ? authMetadata || getCached(jid) || null : null;
-    const rosterVersion = isGroup ? getRosterVersion(jid) : undefined;
-
-    if (command.name !== "group") {
-      // Enforce the `chat` constraint declared by the command. Until now this
-      // was advisory-only and group-only commands could happily run in DMs.
-      const chatScope = (command.chat || "all").toLowerCase();
-      if (chatScope === "group" && !isGroup) {
-        await sendBotMessage(
-          sock,
-          msg.key.remoteJid,
-          {
-            text: t("bot.core.commandHandler.groupsOnly"),
-          },
-          { replyTo: msg },
-        );
-        return true;
-      }
-      if (chatScope === "private" && isGroup) {
-        await sendBotMessage(
-          sock,
-          msg.key.remoteJid,
-          {
-            text: t("bot.core.commandHandler.privateOnly"),
-          },
-          { replyTo: msg },
-        );
-        return true;
-      }
-
-      // Group sub-commands are keyed "group:<name>" everywhere — defaults.cjs,
-      // the dashboard, and `!group kick`. Use the same key here so running
-      // `!kick` directly is gated exactly like running `!group kick`.
-      const permissionKey = command.__category === "group" ? `group:${command.name}` : command.name;
-
-      const permissionCheck = checkCommandPermission(permissionKey, msg, authMetadata, sock);
-
-      if (!permissionCheck.hasPermission) {
-        await sendBotMessage(
+  const groupMetadata = isGroup ? authMetadata || getCached(msg.key.remoteJid) || null : null;
+  const gate = evaluateCommandGates(
+    sock,
+    { ...invocation, isGroup, accountEpoch, options },
+    authMetadata,
+  );
+  if (gate.status !== "ready") {
+    if (gate.status === "stale") {
+      logger.debug("[Command] skipped account work after account change");
+      return gate;
+    }
+    if (!silent) {
+      if (gate.reason === "permission") {
+        const permissionKey =
+          command.__category === "group" ? `group:${command.name}` : command.name;
+        const permissionCheck = checkCommandPermission(permissionKey, msg, authMetadata, sock);
+        await botSender.sendBotMessage(
           sock,
           msg.key.remoteJid,
           { text: permissionCheck.reason },
-          { replyTo: msg },
+          { replyTo: anchor },
         );
-        return true;
-      }
-
-      if (command.userAdminRequired && !permissionCheck.isSenderAdmin) {
-        await sendBotMessage(
-          sock,
-          msg.key.remoteJid,
-          {
-            text: t("bot.core.commandHandler.adminRequired"),
-          },
-          { replyTo: msg },
-        );
-        return true;
-      }
-
-      if (command.botAdminRequired && !checkBotAdmin(authMetadata, sock)) {
-        await sendBotMessage(
-          sock,
-          msg.key.remoteJid,
-          {
-            text: t("bot.core.commandHandler.botAdminRequired"),
-          },
-          { replyTo: msg },
-        );
-        return true;
+      } else {
+        await explainDenial(sock, msg, anchor, gate.status, gate.reason);
       }
     }
+    if (gate.reason === "REACTION_DELIVERY_REFUSED")
+      return { status: "failed", reason: gate.reason };
+    return gate;
+  }
+  if (options.preflight) return { status: "ready" };
 
-    // Pass the invoked name + canonical name so commands like gemini can
-    // detect alias-driven sub-commands (`!del`, `!resetai`, `!generate`).
-    const ctx = {
-      invokedName,
-      canonicalName: command.name,
-      isAlias: invokedName !== command.name,
-      groupMetadata,
-      authGroupMetadata: authMetadata,
-      rawRemainder: rawRemainder || "",
-      accountEpoch,
-      ...(isGroup ? { rosterVersion } : {}),
-    };
-
-    // Wrap the socket so legacy commands that still call sock.sendMessage
-    // directly automatically reply-quote the original command message. This
-    // matches the operator's "every bot message should reply to the command"
-    // requirement without having to migrate every single .cjs file at once.
-    // Action/confirmation commands additionally edit the trigger message in
-    // place instead of posting a second message (see EDIT_IN_PLACE_EXCLUDE).
-    const editInPlace = !EDIT_IN_PLACE_EXCLUDE.has(command.name);
-    const proxiedSock = wrapSockWithReply(sock, msg, editInPlace, command.name);
-    if (readAccountEpoch() !== accountEpoch) {
-      logger.debug("[Command] skipped account work after account change");
-      return true;
-    }
+  const rosterVersion = isGroup ? getRosterVersion(msg.key.remoteJid) : undefined;
+  const state = { attempted: 0 };
+  const ctx = {
+    invokedName,
+    canonicalName: command.name,
+    isAlias: invokedName !== command.name,
+    groupMetadata,
+    authGroupMetadata: authMetadata,
+    rawRemainder: invocation.rawRemainder || "",
+    accountEpoch,
+    source,
+    silentDenials: silent,
+    signal: options.signal,
+    beforeEffect: options.beforeEffect,
+    requester: options.requester || null,
+    effectGuard: options.effectGuard,
+    ...(isGroup ? { rosterVersion } : {}),
+  };
+  const proxiedSock = wrapSockWithReply(sock, msg, {
+    ...options,
+    source,
+    editInPlace: source === "reaction" ? false : options.editInPlace === true,
+    commandName: options.commandName || command.name,
+    silentDenials: silent,
+    state,
+    replyAnchor: anchor,
+  });
+  if (readAccountEpoch() !== accountEpoch) {
+    logger.debug("[Command] skipped account work after account change");
+    return { status: "stale", reason: "account" };
+  }
+  try {
     await withCommand(command.name, () =>
       command.execute(proxiedSock, msg, args, body, groupMetadata, ctx),
     );
-    return true;
+    return { status: "executed", reason: "ok" };
   } catch (error) {
+    const code = error?.code || error?.message;
+    if (source === "reaction" && REACTION_CONTROL_CODES.has(code)) {
+      return { status: "failed", reason: code, error };
+    }
     logger.error({ err: error, command: invokedName }, "Error executing command");
-    // Surface the error name to the user instead of silently re-throwing.
+    if (neutral) {
+      if (state.attempted > 0) return { status: "failed", reason: "ACTION_FAILED", error };
+      try {
+        await botSender.sendBotMessage(
+          sock,
+          msg.key.remoteJid,
+          {
+            text: t("bot.core.commandHandler.failed", {
+              name: error.name || "Error",
+              details: t("bot.core.commandHandler.unknownDetails"),
+            }),
+          },
+          { replyTo: anchor },
+        );
+      } catch {}
+      return { status: "failed", reason: "REACTION_COMMAND_FAILED", error };
+    }
     try {
-      await sendBotMessage(
+      await botSender.sendBotMessage(
         sock,
         msg.key.remoteJid,
         {
@@ -559,7 +734,7 @@ async function runCommand(
             details: error.message || t("bot.core.commandHandler.unknownDetails"),
           }),
         },
-        { replyTo: msg },
+        { replyTo: anchor },
       );
     } catch {}
     throw error;
