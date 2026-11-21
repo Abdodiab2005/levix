@@ -388,7 +388,36 @@ export type ReactionSenderRole =
   | "group_admin"
   | "member"
   | "owner_group_admin";
+export type ReactionSenderMode =
+  | "any"
+  | "owner_group_admin"
+  | "owner"
+  | "group_admin"
+  | "selected"
+  | "custom";
 export type ReactionAction = "stt" | "ping";
+export type ReactionCommandMode = "none" | "quote" | "args" | "unsupported";
+
+export interface ReactionCommandField {
+  id: string;
+  maxLength: number;
+  required: boolean;
+  pattern?: string;
+}
+
+export interface ReactionCommandSpec {
+  key: string;
+  name: string;
+  description: string;
+  mode: ReactionCommandMode;
+  fields: ReactionCommandField[];
+  originalTypes: ReactionOriginalType[];
+  destructive: boolean;
+  transitions: ReactionTransition[];
+  quote: boolean;
+  reason: string | null;
+}
+
 export type ReactionDestinationMode = "same_chat" | "owner_private";
 export type ReactionStatusCode =
   | "AUTOMATION_OFF"

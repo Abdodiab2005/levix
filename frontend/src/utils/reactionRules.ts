@@ -1,6 +1,8 @@
-// Mirrors src/automation/rules.cjs (emoji, definition v1) and the 07c RuleView contract.
+// Mirrors src/automation/rules.cjs (emoji, definition v2), commandEligibility.cjs, and RuleView.
 import type {
-  ReactionAction,
+  ReactionCommandField,
+  ReactionCommandMode,
+  ReactionCommandSpec,
   ReactionDefinition,
   ReactionDestinationMode,
   ReactionIssue,
@@ -8,6 +10,7 @@ import type {
   ReactionOriginalType,
   ReactionRule,
   ReactionRuleWrite,
+  ReactionSenderMode,
   ReactionSenderRole,
   ReactionTransition,
 } from "../types";
@@ -30,11 +33,22 @@ export const ORIGINAL_TYPES: readonly ReactionOriginalType[] = [
 
 export const SENDER_ROLES: readonly ReactionSenderRole[] = [
   "any",
+  "owner_group_admin",
   "owner",
-  "bot_admin",
   "group_admin",
+  "bot_admin",
   "member",
 ];
+
+export const TRIGGER_MODES: readonly Exclude<ReactionSenderMode, "custom">[] = [
+  "any",
+  "owner_group_admin",
+  "owner",
+  "group_admin",
+  "selected",
+];
+
+export const LEGACY_SENDER_ROLES: readonly ReactionSenderRole[] = ["bot_admin", "member"];
 
 export const SENDERS_MAX = 100;
 export const PRIORITY_MIN = 0;
@@ -49,6 +63,159 @@ export const DEFAULT_REACTION_LIMITS: ReactionLimits = {
   globalJobs: 2,
   candidateLimit: 100,
 };
+
+const LINE_PATTERN = /^[^\r\n]*$/;
+
+const GEMINI_RESERVED = new Set<string>([
+  "add",
+  "send",
+  "show",
+  "clear",
+  "del",
+  "delall",
+  "resetai",
+  "generate",
+]);
+
+const SETTINGS_ARGS = new Set<string>([
+  "setprefix",
+  "perm",
+  "autodelete",
+  "lang",
+  "memory",
+  "todo",
+  "group:approveall",
+  "status",
+]);
+
+export const REACTION_COMMAND_FIELDS: Record<string, ReactionCommandField> = {
+  prompt: { id: "prompt", maxLength: 2000, required: true },
+  city: { id: "city", maxLength: 80, required: true },
+  qr: { id: "text", maxLength: 500, required: true },
+  language: { id: "language", maxLength: 32, required: false },
+  status: { id: "status", maxLength: 16, required: true, pattern: "^status$" },
+  keyword: { id: "keyword", maxLength: 41, required: true, pattern: "^#[A-Za-z0-9_]{1,40}$" },
+};
+
+function makeSpec(
+  key: string,
+  mode: ReactionCommandMode,
+  opts: {
+    fields?: ReactionCommandField[];
+    originalTypes?: readonly ReactionOriginalType[];
+    destructive?: boolean;
+    transitions?: readonly ReactionTransition[];
+    quote?: boolean;
+    reason?: string | null;
+    description?: string;
+  } = {},
+): ReactionCommandSpec {
+  const name = key.startsWith("group:") ? key.slice(6) : key;
+  const isUnsupported = mode === "unsupported";
+  const destructive = opts.destructive === true;
+  return {
+    key,
+    name,
+    description: opts.description ?? "",
+    mode,
+    fields: opts.fields ? [...opts.fields] : [],
+    originalTypes: isUnsupported
+      ? []
+      : opts.originalTypes
+        ? [...opts.originalTypes]
+        : [...ORIGINAL_TYPES],
+    destructive,
+    transitions: isUnsupported
+      ? []
+      : opts.transitions
+        ? [...opts.transitions]
+        : destructive
+          ? ["add"]
+          : [...TRANSITIONS],
+    quote: opts.quote === true || mode === "quote",
+    reason: isUnsupported ? (opts.reason ?? "UNCLASSIFIED") : null,
+  };
+}
+
+export const DEFAULT_REACTION_COMMANDS: readonly ReactionCommandSpec[] = [
+  makeSpec("help", "none"),
+  makeSpec("lang", "none"),
+  makeSpec("listschedules", "none"),
+  makeSpec("ping", "none"),
+  makeSpec("rand", "none"),
+  makeSpec("status", "none"),
+  makeSpec("update", "none"),
+  makeSpec("autodelete", "none"),
+  makeSpec("perm", "none"),
+  makeSpec("setprefix", "none"),
+  makeSpec("group:all", "none"),
+  makeSpec("group:antispam", "none"),
+  makeSpec("group:approveall", "none"),
+  makeSpec("group:flagged", "none"),
+  makeSpec("group:members", "none"),
+  makeSpec("group:policy", "none"),
+  makeSpec("group:rules", "none"),
+  makeSpec("group:tagadmins", "none"),
+
+  makeSpec("calc", "quote"),
+  makeSpec("digit", "quote"),
+  makeSpec("md", "quote"),
+  makeSpec("send", "quote"),
+  makeSpec("shortlink", "quote"),
+  makeSpec("stt", "quote", { originalTypes: ["voice"] }),
+  makeSpec("toimage", "quote", { originalTypes: ["sticker"] }),
+  makeSpec("tts", "quote"),
+  makeSpec("group:kick", "quote", { destructive: true, transitions: ["add"] }),
+
+  makeSpec("gemini", "args", { fields: [REACTION_COMMAND_FIELDS.prompt], quote: true }),
+  makeSpec("group:note", "args", { fields: [REACTION_COMMAND_FIELDS.keyword] }),
+  makeSpec("prayer", "args", { fields: [REACTION_COMMAND_FIELDS.city] }),
+  makeSpec("weather", "args", { fields: [REACTION_COMMAND_FIELDS.city] }),
+  makeSpec("qr", "args", { fields: [REACTION_COMMAND_FIELDS.qr] }),
+  makeSpec("translate", "args", { fields: [REACTION_COMMAND_FIELDS.language], quote: true }),
+  makeSpec("mod", "args", { fields: [REACTION_COMMAND_FIELDS.status] }),
+
+  makeSpec("block", "unsupported", { reason: "SESSION_OR_ACCOUNT_ACTION" }),
+  makeSpec("unblock", "unsupported", { reason: "SESSION_OR_ACCOUNT_ACTION" }),
+  makeSpec("restart", "unsupported", { reason: "SESSION_OR_ACCOUNT_ACTION" }),
+  makeSpec("stopbot", "unsupported", { reason: "SESSION_OR_ACCOUNT_ACTION" }),
+  makeSpec("group:antilink", "unsupported", { reason: "SETTINGS_CHANGE" }),
+  makeSpec("group:media", "unsupported", { reason: "SETTINGS_CHANGE" }),
+  makeSpec("group:welcome", "unsupported", { reason: "SETTINGS_CHANGE" }),
+  makeSpec("group:setname", "unsupported", { reason: "SETTINGS_CHANGE" }),
+  makeSpec("group:setrules", "unsupported", { reason: "SETTINGS_CHANGE" }),
+  makeSpec("group:setwarn", "unsupported", { reason: "SETTINGS_CHANGE" }),
+  makeSpec("group:add", "unsupported", { reason: "SETTINGS_CHANGE" }),
+  makeSpec("schedule", "unsupported", { reason: "DURABLE_JOB" }),
+  makeSpec("autoschedule", "unsupported", { reason: "DURABLE_JOB" }),
+  makeSpec("deleteschedule", "unsupported", { reason: "DURABLE_JOB" }),
+  makeSpec("group", "unsupported", { reason: "WRAPPER" }),
+  makeSpec("notes", "unsupported", { reason: "KNOWN_DEFECT" }),
+  makeSpec("score", "unsupported", { reason: "KNOWN_DEFECT" }),
+  makeSpec("group:setpp", "unsupported", { reason: "KNOWN_DEFECT" }),
+  makeSpec("group:warn", "unsupported", { reason: "KNOWN_DEFECT" }),
+  makeSpec("group:warns", "unsupported", { reason: "KNOWN_DEFECT" }),
+  makeSpec("debt", "unsupported", { reason: "KNOWN_DEFECT" }),
+  makeSpec("memory", "unsupported", { reason: "REQUESTER_SCOPE" }),
+  makeSpec("todo", "unsupported", { reason: "REQUESTER_SCOPE" }),
+  makeSpec("packs", "unsupported", { reason: "REQUESTER_SCOPE" }),
+  makeSpec("stickers", "unsupported", { reason: "REQUESTER_SCOPE" }),
+  makeSpec("sticker", "unsupported", { reason: "NOT_IN_5_0_1" }),
+  makeSpec("group:promote", "unsupported", { reason: "NOT_IN_5_0_1" }),
+  makeSpec("group:demote", "unsupported", { reason: "NOT_IN_5_0_1" }),
+  makeSpec("group:clearwarns", "unsupported", { reason: "NOT_IN_5_0_1" }),
+  makeSpec("poll", "unsupported", { reason: "NOT_IN_5_0_1" }),
+  makeSpec("loop", "unsupported", { reason: "NOT_IN_5_0_1" }),
+  makeSpec("pack", "unsupported", { reason: "NOT_IN_5_0_1" }),
+  makeSpec("blacklist", "unsupported", { reason: "NOT_IN_5_0_1" }),
+  makeSpec("group:deletenote", "unsupported", { reason: "NOT_IN_5_0_1" }),
+  makeSpec("group:save", "unsupported", { reason: "NOT_IN_5_0_1" }),
+  makeSpec("group:removeall", "unsupported", { reason: "NOT_IN_5_0_1" }),
+];
+
+const DEFAULT_COMMAND_MAP = new Map<string, ReactionCommandSpec>(
+  DEFAULT_REACTION_COMMANDS.map((spec) => [spec.key, spec]),
+);
 
 const ATTENTION_STATUS = new Set<string>([
   "RULE_INVALID",
@@ -66,7 +233,7 @@ export type ReactionSort = "priority" | "chat" | "recent";
 
 export interface ReactionFilters {
   status: "any" | "ready" | "off" | "attention";
-  action: "any" | ReactionAction;
+  action: string;
 }
 
 export const EMPTY_REACTION_FILTERS: ReactionFilters = {
@@ -82,9 +249,289 @@ export interface ReactionDraft {
   originalTypes: ReactionOriginalType[];
   role: ReactionSenderRole;
   senderIds: string[];
-  action: ReactionAction | "";
+  senderMode?: ReactionSenderMode;
+  action: string;
+  commandArgs: string[];
+  allowOthersOnLinkedMessages: boolean;
   destination: ReactionDestinationMode;
   priority: number;
+}
+
+export interface ReactionCommandPickerItem extends ReactionCommandSpec {
+  token: string;
+  disabled: boolean;
+  reasonKey: string | null;
+}
+
+export type ReactionFieldErrorCode = "required" | "too_long" | "multiline" | "pattern" | "reserved";
+
+export interface ReactionArgsValidation {
+  ok: boolean;
+  errors: ReactionIssue[];
+  fieldErrors: Record<string, ReactionFieldErrorCode>;
+}
+
+export function classifyReactionCommand(
+  key: string,
+  catalog?: readonly ReactionCommandSpec[],
+): ReactionCommandSpec {
+  if (typeof key !== "string" || !key) {
+    return makeSpec("", "unsupported", { reason: "UNCLASSIFIED" });
+  }
+  const fromCatalog = catalog?.find((entry) => entry.key === key);
+  if (fromCatalog) return fromCatalog;
+  const fallback = DEFAULT_COMMAND_MAP.get(key);
+  if (fallback) return fallback;
+  return makeSpec(key, "unsupported", { reason: "UNCLASSIFIED" });
+}
+
+export function formatCommandToken(keyOrName: string, prefix = "!"): string {
+  const raw = typeof keyOrName === "string" ? keyOrName.trim() : "";
+  if (!raw) return "";
+  const bare = raw.startsWith("group:") ? raw.slice("group:".length) : raw;
+  if (!bare) return "";
+  const livePrefix = typeof prefix === "string" && prefix.trim() ? prefix.trim() : "!";
+  return `${livePrefix}${bare}`;
+}
+
+export function unsupportedReasonKey(reason: string | null | undefined): string {
+  switch (reason) {
+    case "SESSION_OR_ACCOUNT_ACTION":
+      return "reactionReasonSessionOrAccount";
+    case "SETTINGS_CHANGE":
+      return "reactionReasonSettingsChange";
+    case "DURABLE_JOB":
+      return "reactionReasonDurableJob";
+    case "WRAPPER":
+      return "reactionReasonWrapper";
+    case "KNOWN_DEFECT":
+      return "reactionReasonKnownDefect";
+    case "NOT_IN_5_0_1":
+      return "reactionReasonNotIn501";
+    case "REQUESTER_SCOPE":
+      return "reactionReasonRequesterScope";
+    default:
+      return "reactionReasonUnsupported";
+  }
+}
+
+export function quoteNoteKey(
+  spec:
+    | Pick<ReactionCommandSpec, "key" | "mode" | "quote" | "originalTypes" | "destructive">
+    | null
+    | undefined,
+): string | null {
+  if (!spec || (spec.mode !== "quote" && !spec.quote)) return null;
+  if (spec.key === "stt" || (spec.originalTypes.length === 1 && spec.originalTypes[0] === "voice"))
+    return "reactionQuoteVoice";
+  if (
+    spec.key === "toimage" ||
+    (spec.originalTypes.length === 1 && spec.originalTypes[0] === "sticker")
+  )
+    return "reactionQuoteSticker";
+  if (spec.destructive) return "reactionQuoteTargetAuthor";
+  return "reactionQuoteMessage";
+}
+
+export function commandFieldLabelKey(fieldId: string): string {
+  switch (fieldId) {
+    case "prompt":
+      return "reactionArgPrompt";
+    case "city":
+      return "reactionArgCity";
+    case "text":
+      return "reactionArgText";
+    case "language":
+      return "reactionArgLanguage";
+    case "status":
+      return "reactionArgStatus";
+    case "keyword":
+      return "reactionArgKeyword";
+    default:
+      return "reactionArgValue";
+  }
+}
+
+export function buildCommandPickerItems(
+  commands: readonly ReactionCommandSpec[] = DEFAULT_REACTION_COMMANDS,
+  query = "",
+  prefix = "!",
+): ReactionCommandPickerItem[] {
+  const source = commands.length > 0 ? commands : DEFAULT_REACTION_COMMANDS;
+  const needle = query.trim().toLowerCase();
+  const items: ReactionCommandPickerItem[] = source.map((cmd) => {
+    const token = formatCommandToken(cmd.name || cmd.key, prefix);
+    const disabled = cmd.mode === "unsupported";
+    return {
+      ...cmd,
+      token,
+      disabled,
+      reasonKey: disabled ? unsupportedReasonKey(cmd.reason) : null,
+    };
+  });
+  if (!needle) return items;
+  return items.filter((item) => {
+    const haystacks = [
+      item.key.toLowerCase(),
+      item.name.toLowerCase(),
+      item.token.toLowerCase(),
+      (item.description || "").toLowerCase(),
+    ];
+    return haystacks.some((text) => text.includes(needle));
+  });
+}
+
+export function validateReactionCommandArgs(
+  key: string,
+  args: readonly string[],
+  catalog?: readonly ReactionCommandSpec[],
+): ReactionArgsValidation {
+  const spec = classifyReactionCommand(key, catalog);
+  const errors: ReactionIssue[] = [];
+  const fieldErrors: Record<string, ReactionFieldErrorCode> = {};
+  const fail = (code = "invalid") => errors.push({ field: "definition.command.args", code });
+
+  if (!Array.isArray(args) || args.some((item) => typeof item !== "string")) {
+    fail();
+    return { ok: false, errors, fieldErrors };
+  }
+  if (spec.mode === "unsupported") {
+    errors.push({ field: "definition.command.name", code: spec.reason || "UNCLASSIFIED" });
+    return { ok: false, errors, fieldErrors };
+  }
+  if (spec.mode === "none" || spec.mode === "quote") {
+    if (args.length) fail(SETTINGS_ARGS.has(key) ? "SETTINGS_CHANGE" : "invalid");
+    return { ok: errors.length === 0, errors, fieldErrors };
+  }
+  const fields = spec.fields || [];
+  if (args.length > fields.length) fail();
+  fields.forEach((field, index) => {
+    const value = args[index];
+    if (value == null || value === "") {
+      if (field.required) {
+        fail("required");
+        fieldErrors[field.id] = "required";
+      }
+      return;
+    }
+    if (!LINE_PATTERN.test(value)) {
+      fail();
+      fieldErrors[field.id] = "multiline";
+      return;
+    }
+    // Same checks as the server, which reports length and pattern separately.
+    if (value.length > field.maxLength) {
+      fail();
+      fieldErrors[field.id] = "too_long";
+    }
+    if (field.pattern && !new RegExp(field.pattern).test(value)) {
+      fail();
+      fieldErrors[field.id] ??= "pattern";
+    }
+  });
+  if (errors.length === 0 && key === "gemini" && typeof args[0] === "string") {
+    const word = args[0].trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+    if (GEMINI_RESERVED.has(word)) {
+      fail();
+      fieldErrors.prompt = "reserved";
+    }
+  }
+  return { ok: errors.length === 0, errors, fieldErrors };
+}
+
+export function isLegacySenderConfig(role: string, ids: readonly string[]): boolean {
+  if (role === "bot_admin" || role === "member") return true;
+  if (role !== "any" && ids.length > 0) return true;
+  return false;
+}
+
+export function senderModeFromSenders(
+  role: ReactionSenderRole,
+  ids: readonly string[],
+): ReactionSenderMode {
+  if (isLegacySenderConfig(role, ids)) return "custom";
+  if (ids.length > 0) return "selected";
+  if (
+    role === "any" ||
+    role === "owner_group_admin" ||
+    role === "owner" ||
+    role === "group_admin"
+  ) {
+    return role;
+  }
+  return "custom";
+}
+
+export function resolveSenderMode(
+  draft: Pick<ReactionDraft, "role" | "senderIds" | "senderMode">,
+): ReactionSenderMode {
+  const ids = Array.isArray(draft.senderIds) ? draft.senderIds : [];
+  if (isLegacySenderConfig(draft.role, ids)) return "custom";
+  if (draft.senderMode === "selected") return "selected";
+  if (draft.senderMode === "custom") return "custom";
+  if (ids.length > 0 && draft.role === "any") return "selected";
+  return senderModeFromSenders(draft.role, ids);
+}
+
+export function selectSenderMode(draft: ReactionDraft, mode: ReactionSenderMode): ReactionDraft {
+  if (mode === "custom") {
+    return resolveSenderMode(draft) === "custom" ? draft : draft;
+  }
+  if (mode === "selected") {
+    return {
+      ...draft,
+      senderMode: "selected",
+      role: "any",
+    };
+  }
+  return {
+    ...draft,
+    senderMode: mode,
+    role: mode,
+    senderIds: [],
+  };
+}
+
+export function selectReactionCommand(
+  draft: ReactionDraft,
+  commandKey: string,
+  catalog?: readonly ReactionCommandSpec[],
+): ReactionDraft {
+  const spec = classifyReactionCommand(commandKey, catalog);
+  if (spec.mode === "unsupported") return draft;
+  const allowedTypes = spec.originalTypes.length ? [...spec.originalTypes] : [...ORIGINAL_TYPES];
+  const transitions: ReactionTransition[] = spec.destructive
+    ? ["add"]
+    : draft.transitions.length
+      ? [...draft.transitions]
+      : ["add"];
+  const commandArgs =
+    spec.mode === "args"
+      ? spec.fields.map((field) =>
+          field.id === "status" && field.pattern === "^status$" ? "status" : "",
+        )
+      : [];
+  return {
+    ...draft,
+    action: spec.key,
+    commandArgs,
+    originalTypes: allowedTypes,
+    transitions,
+  };
+}
+
+export function reuseUnchangedDraftArrays(next: ReactionDraft, base: ReactionDraft): ReactionDraft {
+  const sameList = (a: readonly string[], b: readonly string[]) =>
+    a.length === b.length && a.every((item, idx) => item === b[idx]);
+  return {
+    ...next,
+    transitions: sameList(next.transitions, base.transitions) ? base.transitions : next.transitions,
+    originalTypes: sameList(next.originalTypes, base.originalTypes)
+      ? base.originalTypes
+      : next.originalTypes,
+    senderIds: sameList(next.senderIds, base.senderIds) ? base.senderIds : next.senderIds,
+    commandArgs: sameList(next.commandArgs, base.commandArgs) ? base.commandArgs : next.commandArgs,
+  };
 }
 
 /** Same grapheme / pictographic check as src/automation/rules.cjs. */
@@ -110,7 +557,10 @@ export function emptyReactionDraft(): ReactionDraft {
     originalTypes: [...ORIGINAL_TYPES],
     role: "owner",
     senderIds: [],
+    senderMode: "owner",
     action: "",
+    commandArgs: [],
+    allowOthersOnLinkedMessages: false,
     destination: "same_chat",
     priority: PRIORITY_DEFAULT,
   };
@@ -134,8 +584,16 @@ function commandNameOf(definition: Record<string, unknown> | null): string {
   return typeof definition?.action === "string" ? definition.action : "";
 }
 
+function commandArgsOf(definition: Record<string, unknown> | null): string[] {
+  const command = asRecord(definition?.command);
+  return stringList(command?.args);
+}
+
 /** Untrusted stored definition: never throw, give Edit a replaceable draft. */
-export function draftFromRule(rule: ReactionRule): ReactionDraft {
+export function draftFromRule(
+  rule: ReactionRule,
+  catalog?: readonly ReactionCommandSpec[],
+): ReactionDraft {
   const definition = asRecord(rule.definition);
   const senders = asRecord(definition?.senders);
   const destination = asRecord(definition?.destination);
@@ -145,25 +603,42 @@ export function draftFromRule(rule: ReactionRule): ReactionDraft {
   const originalTypes = stringList(definition?.originalTypes).filter(
     (item): item is ReactionOriginalType => (ORIGINAL_TYPES as readonly string[]).includes(item),
   );
-  const role = senders?.role;
-  const name = commandNameOf(definition);
+  const rawRole = senders?.role;
+  const role: ReactionSenderRole = (SENDER_ROLES as readonly string[]).includes(rawRole as string)
+    ? (rawRole as ReactionSenderRole)
+    : "owner";
+  const senderIds = stringList(senders?.ids).slice(0, SENDERS_MAX);
+  const senderMode = senderModeFromSenders(role, senderIds);
+  const rawName = commandNameOf(definition);
+  const name = /^(?:group:)?[a-z][a-z0-9]*$/.test(rawName) ? rawName : "";
+  const spec = name ? classifyReactionCommand(name, catalog) : null;
+  const rawArgs = commandArgsOf(definition);
+  const commandArgs =
+    spec?.mode === "args" ? spec.fields.map((_, idx) => rawArgs[idx] ?? "") : rawArgs;
   const mode = destination?.mode;
   return {
     chatJid: typeof rule.chatJid === "string" ? rule.chatJid : "",
     chatName:
-      typeof rule.chatName === "string" && rule.chatName !== rule.chatJid ? rule.chatName : "",
+      typeof rule.chatName === "string" &&
+      rule.chatName !== rule.chatJid &&
+      !isRawJid(rule.chatName)
+        ? rule.chatName
+        : "",
     emoji: typeof definition?.emoji === "string" ? definition.emoji : "",
-    transitions: transitions.length ? transitions : ["add"],
+    transitions: spec?.destructive ? ["add"] : transitions.length ? transitions : ["add"],
     originalTypes: originalTypes.length
       ? originalTypes
       : name === "stt"
         ? ["voice"]
-        : [...ORIGINAL_TYPES],
-    role: (SENDER_ROLES as readonly string[]).includes(role as string)
-      ? (role as ReactionSenderRole)
-      : "owner",
-    senderIds: stringList(senders?.ids).slice(0, SENDERS_MAX),
-    action: name === "ping" || name === "stt" ? name : "",
+        : spec?.originalTypes.length
+          ? [...spec.originalTypes]
+          : [...ORIGINAL_TYPES],
+    role,
+    senderIds,
+    senderMode,
+    action: name,
+    commandArgs,
+    allowOthersOnLinkedMessages: definition?.allowOthersOnLinkedMessages === true,
     destination: mode === "owner_private" || mode === "same_chat" ? mode : "same_chat",
     priority: Number.isInteger(rule.priority) ? rule.priority : PRIORITY_DEFAULT,
   };
@@ -173,39 +648,92 @@ export function draftFromRule(rule: ReactionRule): ReactionDraft {
 export function displayRuleMeta(rule: ReactionRule): {
   emoji: string;
   action: string;
+  args: string[];
   destination: string;
   role: string;
+  senderMode: ReactionSenderMode;
+  senderCount: number;
 } {
   const definition = asRecord(rule.definition);
   const senders = asRecord(definition?.senders);
   const destination = asRecord(definition?.destination);
   const emoji = definition?.emoji;
   const action = commandNameOf(definition);
+  const args = commandArgsOf(definition);
   const mode = destination?.mode;
-  const role = senders?.role;
+  const rawRole = typeof senders?.role === "string" ? senders.role : "";
+  const ids = stringList(senders?.ids);
+  const validRole: ReactionSenderRole = (SENDER_ROLES as readonly string[]).includes(rawRole)
+    ? (rawRole as ReactionSenderRole)
+    : "owner";
+  const senderMode = rawRole ? senderModeFromSenders(validRole, ids) : "owner";
   return {
     emoji: typeof emoji === "string" && emoji ? emoji : rule.valid === false ? "?" : "—",
     action,
+    args,
     destination: typeof mode === "string" ? mode : "",
-    role: typeof role === "string" ? role : "",
+    role: rawRole,
+    senderMode,
+    senderCount: ids.length,
   };
 }
 
-export function draftToWrite(draft: ReactionDraft): ReactionRuleWrite {
+function normalizedArgsForWrite(
+  spec: ReactionCommandSpec,
+  rawArgs: readonly string[] | undefined,
+): string[] {
+  const list = Array.isArray(rawArgs) ? rawArgs : [];
+  if (spec.mode !== "args") return [];
+  const fields = spec.fields || [];
+  const values = fields.map((_, index) => (typeof list[index] === "string" ? list[index] : ""));
+  while (
+    values.length > 0 &&
+    values[values.length - 1] === "" &&
+    !fields[values.length - 1]?.required
+  ) {
+    values.pop();
+  }
+  return values;
+}
+
+export function draftToWrite(
+  draft: ReactionDraft,
+  catalog?: readonly ReactionCommandSpec[],
+): ReactionRuleWrite {
   if (!draft.action) throw new Error("REACTION_ACTION_REQUIRED");
-  const originalTypes =
-    draft.action === "stt" ? (["voice"] as ReactionOriginalType[]) : [...draft.originalTypes];
+  const spec = classifyReactionCommand(draft.action, catalog);
+  if (spec.mode === "unsupported") throw new Error("REACTION_ACTION_UNSUPPORTED");
+  const senderMode = resolveSenderMode(draft);
+  const senderIds = Array.isArray(draft.senderIds) ? [...draft.senderIds] : [];
+  if (senderMode === "selected" && senderIds.length === 0) {
+    throw new Error("REACTION_SENDERS_REQUIRED");
+  }
+  const senders: ReactionDefinition["senders"] =
+    senderMode === "selected"
+      ? { role: "any", ids: senderIds }
+      : senderMode === "custom"
+        ? { role: draft.role, ids: senderIds }
+        : { role: senderMode, ids: [] };
+  const allowedTypes = spec.originalTypes.length ? spec.originalTypes : ORIGINAL_TYPES;
+  const originalTypes: ReactionOriginalType[] =
+    draft.action === "stt"
+      ? ["voice"]
+      : allowedTypes.length === 1 &&
+          draft.originalTypes.length === 1 &&
+          draft.originalTypes[0] === allowedTypes[0]
+        ? [...allowedTypes]
+        : draft.originalTypes.filter((type) => allowedTypes.includes(type));
+  const transitions: ReactionTransition[] = spec.destructive ? ["add"] : [...draft.transitions];
+  const args = normalizedArgsForWrite(spec, draft.commandArgs);
   const definition: ReactionDefinition = {
     version: 2,
     emoji: draft.emoji,
-    transitions: [...draft.transitions],
+    transitions,
     originalTypes,
-    senders: {
-      role: draft.role,
-      ids: [...draft.senderIds],
-    },
-    command: { name: draft.action, args: [] },
+    senders,
+    command: { name: draft.action, args },
     destination: { mode: draft.destination },
+    ...(draft.allowOthersOnLinkedMessages === true ? { allowOthersOnLinkedMessages: true } : {}),
   };
   return {
     chatJid: draft.chatJid,
@@ -219,30 +747,93 @@ export function clampPriority(value: number): number {
   return Math.min(PRIORITY_MAX, Math.max(PRIORITY_MIN, Math.round(value)));
 }
 
+export function isRawJid(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return /@(?:s\.whatsapp\.net|lid|g\.us)\b/i.test(value.trim());
+}
+
 export function peerLabel(
   jid: string | null | undefined,
   names?: ReadonlyMap<string, string>,
 ): string {
   if (!jid) return "";
   const known = names?.get(jid);
-  if (known && known !== jid) return known;
+  if (known && known !== jid && !isRawJid(known)) return known;
   const phone = /^(\d+)@s\.whatsapp\.net$/i.exec(jid);
   if (phone) return `+${phone[1]}`;
   return "";
 }
 
+export function ruleChatLabel(
+  rule: Pick<ReactionRule, "chatJid" | "chatName">,
+  names?: ReadonlyMap<string, string>,
+  fallback = "",
+): string {
+  if (
+    typeof rule.chatName === "string" &&
+    rule.chatName.trim() &&
+    rule.chatName !== rule.chatJid &&
+    !isRawJid(rule.chatName)
+  ) {
+    return rule.chatName.trim();
+  }
+  const resolved = peerLabel(rule.chatJid, names);
+  if (resolved) return resolved;
+  return fallback;
+}
+
 /** Client checks run before the read-only server check or any write. */
-export function reactionDraftIssues(draft: ReactionDraft): ReactionIssue[] {
+export function reactionDraftIssues(
+  draft: ReactionDraft,
+  catalog?: readonly ReactionCommandSpec[],
+): ReactionIssue[] {
   const issues: ReactionIssue[] = [];
   if (!draft.chatJid) issues.push({ field: "chatJid", code: "required" });
   if (!isReactionEmoji(draft.emoji))
     issues.push({ field: "definition.emoji", code: draft.emoji ? "invalid" : "required" });
-  if (!draft.action) issues.push({ field: "definition.action", code: "invalid" });
-  if (!draft.transitions.length) issues.push({ field: "definition.transitions", code: "invalid" });
-  if (draft.action !== "stt" && !draft.originalTypes.length)
-    issues.push({ field: "definition.originalTypes", code: "invalid" });
-  if (draft.senderIds.length > SENDERS_MAX)
+
+  const spec = draft.action ? classifyReactionCommand(draft.action, catalog) : null;
+  if (!draft.action) {
+    issues.push({ field: "definition.action", code: "invalid" });
+  } else if (spec?.mode === "unsupported") {
+    issues.push({ field: "definition.command.name", code: spec.reason || "UNCLASSIFIED" });
+  } else if (spec) {
+    const rawArgs = Array.isArray(draft.commandArgs) ? draft.commandArgs : [];
+    const argsToCheck = spec.mode === "args" ? normalizedArgsForWrite(spec, rawArgs) : rawArgs;
+    const argCheck = validateReactionCommandArgs(draft.action, argsToCheck, catalog);
+    for (const err of argCheck.errors) issues.push(err);
+    if (spec.destructive && (draft.transitions.length !== 1 || draft.transitions[0] !== "add")) {
+      issues.push({ field: "definition.transitions", code: "add_only" });
+    }
+  }
+
+  if (!draft.transitions.length) {
+    issues.push({ field: "definition.transitions", code: "invalid" });
+  }
+  if (draft.action !== "stt") {
+    if (!draft.originalTypes.length) {
+      issues.push({ field: "definition.originalTypes", code: "invalid" });
+    } else if (
+      spec &&
+      spec.mode !== "unsupported" &&
+      spec.originalTypes.length > 0 &&
+      draft.originalTypes.some((type) => !spec.originalTypes.includes(type))
+    ) {
+      issues.push({ field: "definition.originalTypes", code: "invalid" });
+    }
+  }
+
+  const senderMode = resolveSenderMode(draft);
+  const senderIds = Array.isArray(draft.senderIds) ? draft.senderIds : [];
+  if (senderMode === "selected" && senderIds.length === 0) {
+    issues.push({ field: "definition.senders.ids", code: "required" });
+  }
+  if (senderIds.length > SENDERS_MAX) {
     issues.push({ field: "definition.senders.ids", code: "too_many" });
+  }
+  if (new Set(senderIds).size !== senderIds.length) {
+    issues.push({ field: "definition.senders.ids", code: "duplicate" });
+  }
   return issues;
 }
 
@@ -258,6 +849,74 @@ export function statusTone(code: string): "ok" | "warn" | "danger" | "neutral" {
     return "danger";
   }
   return "warn";
+}
+
+export function reactionOutcomeKey(code: string | null | undefined): string {
+  switch (code) {
+    case "DELIVERED":
+      return "reactionOutcomeDelivered";
+    case "NO_MATCH":
+      return "reactionOutcomeNoMatch";
+    case "BUSY":
+      return "reactionOutcomeBusy";
+    case "ACTION_FAILED":
+      return "reactionOutcomeActionFailed";
+    case "RATE_LIMIT":
+      return "reactionOutcomeRateLimit";
+    case "CAPACITY":
+      return "reactionOutcomeCapacity";
+    case "EVENT_MISSING":
+      return "reactionOutcomeEventMissing";
+    case "DUPLICATE":
+      return "reactionOutcomeDuplicate";
+    case "REACTION_CANCELLED":
+      return "reactionOutcomeReactionCancelled";
+    case "REACTION_TIMEOUT":
+      return "reactionOutcomeReactionTimeout";
+    case "REACTION_STALE":
+      return "reactionOutcomeReactionStale";
+    case "REACTION_INACCESSIBLE":
+      return "reactionOutcomeReactionInaccessible";
+    case "REACTION_FORBIDDEN":
+      return "reactionOutcomeReactionForbidden";
+    case "REACTION_STT_DISABLED":
+      return "reactionOutcomeReactionSttDisabled";
+    case "REACTION_DELIVERY_REFUSED":
+      return "reactionOutcomeReactionDeliveryRefused";
+    case "REACTION_CAPACITY":
+      return "reactionOutcomeReactionCapacity";
+    case "REACTION_IDENTITY_INVALID":
+      return "reactionOutcomeReactionIdentityInvalid";
+    case "REACTION_VOICE_REQUIRED":
+      return "reactionOutcomeReactionVoiceRequired";
+    case "STT_KEY_REQUIRED":
+      return "reactionOutcomeSttKeyRequired";
+    case "STT_OUTPUT_INVALID":
+      return "reactionOutcomeSttOutputInvalid";
+    case "MEDIA_AUDIO_INVALID":
+      return "reactionOutcomeMediaAudioInvalid";
+    case "MEDIA_TOO_LARGE":
+      return "reactionOutcomeMediaTooLarge";
+    case "MEDIA_NOT_AVAILABLE":
+      return "reactionOutcomeMediaNotAvailable";
+    case "MEDIA_URL_INVALID":
+      return "reactionOutcomeMediaUrlInvalid";
+    case "REACTION_COMMAND_DENIED":
+      return "reactionOutcomeReactionCommandDenied";
+    case "REACTION_COMMAND_UNSUPPORTED":
+      return "reactionOutcomeReactionCommandUnsupported";
+    case "REACTION_COMMAND_FAILED":
+      return "reactionOutcomeReactionCommandFailed";
+    default:
+      return code ? "reactionStatusUnknown" : "reactionNeverRan";
+  }
+}
+
+export function shouldShowAutomationOffCallout(
+  automationEnabled: boolean,
+  rules: readonly Pick<ReactionRule, "enabled">[],
+): boolean {
+  return !automationEnabled && rules.some((rule) => rule.enabled);
 }
 
 export function ruleMatchesFilters(rule: ReactionRule, filters: ReactionFilters): boolean {
@@ -379,7 +1038,11 @@ export function issueFieldName(field: string): string {
 }
 
 export function issueBucket(field: string): string {
-  const root = issueFieldName(field).split(".")[0];
+  const name = issueFieldName(field);
+  if (name === "command.args" || name.startsWith("command.args.")) return "args";
+  if (name === "command" || name.startsWith("command.")) return "action";
+  if (name === "allowOthersOnLinkedMessages") return "senders";
+  const root = name.split(".")[0];
   if (
     root === "chatJid" ||
     root === "priority" ||

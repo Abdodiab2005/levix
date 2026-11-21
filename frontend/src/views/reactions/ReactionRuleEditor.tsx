@@ -1,48 +1,71 @@
 import { userErrorMessage } from "../../utils/userError";
+import { Check, Search } from "lucide-react";
 import type React from "react";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api/client";
 import { RecipientPicker } from "../../components/RecipientPicker";
 import {
+  Badge,
   Button,
+  Callout,
   Checkbox,
   Chip,
+  CodeText,
   Dialog,
   Disclosure,
   Field,
+  FormActions,
   IconButton,
   Input,
   RadioGroup,
-  SegmentedControl,
-  Select,
+  type RadioOption,
+  Toggle,
   UserText,
+  useDirtyForm,
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type {
+  ReactionCommandField,
+  ReactionCommandSpec,
   ReactionIssue,
   ReactionOriginalType,
   ReactionRule,
+  ReactionSenderMode,
   ReactionTransition,
 } from "../../types";
 import { fill } from "../../utils/fill";
 import {
+  DEFAULT_REACTION_COMMANDS,
   EMOJI_PALETTE,
   ORIGINAL_TYPES,
   SENDERS_MAX,
-  SENDER_ROLES,
   TRANSITIONS,
+  TRIGGER_MODES,
+  buildCommandPickerItems,
   clampPriority,
+  classifyReactionCommand,
+  commandFieldLabelKey,
   draftFromRule,
   draftToWrite,
   emptyReactionDraft,
+  formatCommandToken,
+  isRawJid,
   isReactionEmoji,
   issueBucket,
   issueFieldName,
   peerLabel,
+  quoteNoteKey,
   reactionApiCode,
   reactionApiIssues,
   reactionDraftIssues,
+  resolveSenderMode,
+  reuseUnchangedDraftArrays,
+  selectReactionCommand,
+  selectSenderMode,
+  unsupportedReasonKey,
+  validateReactionCommandArgs,
   type ReactionDraft,
+  type ReactionFieldErrorCode,
 } from "../../utils/reactionRules";
 
 type TFn = (key: string) => string;
@@ -51,7 +74,10 @@ interface ReactionRuleEditorProps {
   open: boolean;
   rule: ReactionRule | null;
   names: ReadonlyMap<string, string>;
+  commands?: readonly ReactionCommandSpec[];
+  prefix?: string;
   ownerLinked: boolean;
+  onRememberRecipient?: (jid: string, label: string) => void;
   onClose: () => void;
   onSaved: (rule: ReactionRule, edited: boolean) => void;
   onConflict: () => void;
@@ -68,10 +94,17 @@ function errorMessage(t: TFn, err: unknown, fallbackKey: string): string {
 }
 
 function issueMessage(t: TFn, field: string, code: string): string {
-  const root = issueFieldName(field).split(".")[0];
+  const name = issueFieldName(field);
+  const root = name.split(".")[0];
   if (code === "owner_unlinked") return t("reactionDestOwnerDisabled");
   if (root === "chatJid" && code === "required") return t("reactionChatRequired");
   if (root === "emoji" && code === "required") return t("reactionEmojiRequired");
+  if (root === "senders" && code === "required") return t("reactionSendersRequired");
+  if (name === "command.args" && code === "required") return t("reactionArgRequired");
+  if (name === "command.name" && code && code !== "invalid") {
+    return t(unsupportedReasonKey(code));
+  }
+  if (code === "add_only") return t("reactionIssueTransitionsAddOnly");
   if (code === "voice_only") return t("reactionIssueVoiceOnly");
   if (code === "too_many") {
     if (root === "senders") return t("reactionIssueSendersTooMany");
@@ -87,11 +120,30 @@ function issueMessage(t: TFn, field: string, code: string): string {
   if (root === "emoji") return t("reactionIssueEmojiInvalid");
   if (root === "transitions") return t("reactionIssueTransitionsInvalid");
   if (root === "originalTypes") return t("reactionIssueOriginalTypesInvalid");
-  if (root === "senders") return t("reactionIssueSendersInvalid");
-  if (root === "action") return t("reactionIssueActionInvalid");
+  if (root === "senders" || root === "allowOthersOnLinkedMessages")
+    return t("reactionIssueSendersInvalid");
+  if (name === "command.args") return t("reactionIssueInvalid");
+  if (root === "action" || root === "command") return t("reactionIssueActionInvalid");
   if (root === "destination") return t("reactionIssueDestinationInvalid");
   if (root === "version") return t("reactionIssueVersionInvalid");
   if (root === "body") return t("reactionIssueBodyInvalid");
+  return t("reactionIssueInvalid");
+}
+
+function argFieldErrorMessage(
+  t: TFn,
+  field: ReactionCommandField,
+  code: ReactionFieldErrorCode | undefined,
+): string | undefined {
+  if (!code) return undefined;
+  if (code === "required") return t("reactionArgRequired");
+  if (code === "too_long") return fill(t("reactionArgTooLong"), { max: field.maxLength });
+  if (code === "multiline") return t("reactionArgMultiline");
+  if (code === "reserved") return t("reactionArgGeminiReserved");
+  if (code === "pattern") {
+    if (field.id === "keyword") return t("reactionArgKeywordPattern");
+    if (field.id === "status") return t("reactionArgStatusPattern");
+  }
   return t("reactionIssueInvalid");
 }
 
@@ -111,18 +163,28 @@ function typeLabel(t: TFn, value: ReactionOriginalType): string {
   return t("reactionTypeSticker");
 }
 
-function roleLabel(t: TFn, value: string): string {
-  if (value === "any") return t("reactionRoleAny");
-  if (value === "owner") return t("reactionRoleOwner");
-  if (value === "bot_admin") return t("reactionRoleBotAdmin");
-  if (value === "group_admin") return t("reactionRoleGroupAdmin");
-  return t("reactionRoleMember");
+function senderModeLabel(t: TFn, mode: ReactionSenderMode): string {
+  switch (mode) {
+    case "any":
+      return t("reactionRoleEveryone");
+    case "owner_group_admin":
+      return t("reactionRoleOwnerGroupAdmin");
+    case "owner":
+      return t("reactionRoleOwnerOnly");
+    case "group_admin":
+      return t("reactionRoleGroupAdminOnly");
+    case "selected":
+      return t("reactionRoleSelected");
+    case "custom":
+      return t("reactionRoleCustom");
+  }
 }
 
 function sectionLabel(t: TFn, field: string): string {
   if (field === "chatJid") return t("reactionChat");
   if (field === "emoji") return t("reactionEmoji");
   if (field === "action") return t("reactionAction");
+  if (field === "args") return t("reactionCommandArgs");
   if (field === "originalTypes") return t("reactionTypes");
   if (field === "senders") return t("reactionSendersRole");
   if (field === "transitions") return t("reactionTransitions");
@@ -130,9 +192,11 @@ function sectionLabel(t: TFn, field: string): string {
   return `${t("reactionAdvanced")} (${t("reactionPriority")})`;
 }
 
-function previewText(t: TFn, draft: ReactionDraft): string {
+function previewText(t: TFn, draft: ReactionDraft, prefix: string): string {
+  const mode = resolveSenderMode(draft);
+  const commandToken = formatCommandToken(draft.action, prefix);
   const vars = {
-    role: roleLabel(t, draft.role),
+    role: senderModeLabel(t, mode),
     emoji: draft.emoji || t("reactionPreviewEmoji"),
     transitions:
       draft.transitions.map((item) => transitionLabel(t, item)).join(t("reactionListJoin")) ||
@@ -149,7 +213,9 @@ function previewText(t: TFn, draft: ReactionDraft): string {
         ? t("reactionPreviewActionStt")
         : draft.action === "ping"
           ? t("reactionPreviewActionPing")
-          : t("reactionPreviewActionUnset"),
+          : commandToken
+            ? fill(t("reactionPreviewActionCommand"), { command: commandToken })
+            : t("reactionPreviewActionUnset"),
     destination:
       draft.destination === "owner_private" ? t("reactionDestOwner") : t("reactionDestSame"),
     n: draft.senderIds.length,
@@ -173,7 +239,10 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
   open,
   rule,
   names,
+  commands = DEFAULT_REACTION_COMMANDS,
+  prefix = "!",
   ownerLinked,
+  onRememberRecipient,
   onClose,
   onSaved,
   onConflict,
@@ -189,12 +258,30 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
   const submitGen = useRef(0);
   const submitPending = useRef(false);
 
-  const [draft, setDraft] = useState<ReactionDraft>(emptyReactionDraft);
+  const [initialDraft, setInitialDraft] = useState<ReactionDraft>(emptyReactionDraft);
+  const form = useDirtyForm<ReactionDraft>(
+    initialDraft,
+    "reactionSaveFailed",
+    (t, err, fallbackKey) => errorMessage(t as unknown as TFn, err, fallbackKey),
+  );
+  const { draft } = form;
+
+  const [commandQuery, setCommandQuery] = useState("");
   const [chatPickerOpen, setChatPickerOpen] = useState(false);
   const [senderPickerOpen, setSenderPickerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [pickedNames, setPickedNames] = useState<ReadonlyMap<string, string>>(() => new Map());
+
+  const mergedNames = useMemo(() => {
+    if (pickedNames.size === 0) return names;
+    const map = new Map(names);
+    for (const [k, v] of pickedNames) {
+      if (v && !isRawJid(v)) map.set(k, v);
+    }
+    return map;
+  }, [names, pickedNames]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: ruleId re-freezes the target when the editor switches rules.
   useEffect(() => {
@@ -207,7 +294,10 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
     submitGen.current += 1;
     const source = latestRuleRef.current ?? null;
     frozenSourceRef.current = source;
-    setDraft(source ? draftFromRule(source) : emptyReactionDraft());
+    const base = source ? draftFromRule(source, commands) : emptyReactionDraft();
+    setInitialDraft(base);
+    form.setDraft(base);
+    setCommandQuery("");
     setChatPickerOpen(false);
     setSenderPickerOpen(false);
     setBusy(submitPending.current);
@@ -218,48 +308,82 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
     };
   }, [open, ruleId]);
 
-  const setField = <K extends keyof ReactionDraft>(
-    key: K,
-    value: ReactionDraft[K] | ((previous: ReactionDraft[K]) => ReactionDraft[K]),
-  ) => {
-    setDraft((prev) => ({
-      ...prev,
-      [key]: typeof value === "function" ? value(prev[key]) : value,
-    }));
+  const updateDraft = (updater: (previous: ReactionDraft) => ReactionDraft) => {
+    form.setDraft((prev) => reuseUnchangedDraftArrays(updater(prev), initialDraft));
     setFormError(null);
-    const bucket =
-      key === "chatJid" || key === "chatName"
-        ? "chatJid"
-        : key === "senderIds" || key === "role"
-          ? "senders"
-          : key === "originalTypes"
-            ? "originalTypes"
-            : String(key);
+  };
+
+  const clearBuckets = (...buckets: string[]) => {
     setFieldErrors((prev) => {
       const next = { ...prev };
-      delete next[bucket];
-      if (key === "action") delete next.originalTypes;
+      for (const bucket of buckets) delete next[bucket];
       return next;
     });
   };
 
+  const setField = <K extends keyof ReactionDraft>(
+    key: K,
+    value: ReactionDraft[K] | ((previous: ReactionDraft[K]) => ReactionDraft[K]),
+  ) => {
+    updateDraft((prev) => ({
+      ...prev,
+      [key]: typeof value === "function" ? value(prev[key]) : value,
+    }));
+    const bucket =
+      key === "chatJid" || key === "chatName"
+        ? "chatJid"
+        : key === "senderIds" ||
+            key === "role" ||
+            key === "senderMode" ||
+            key === "allowOthersOnLinkedMessages"
+          ? "senders"
+          : key === "originalTypes"
+            ? "originalTypes"
+            : key === "commandArgs"
+              ? "args"
+              : String(key);
+    clearBuckets(bucket, ...(key === "action" ? ["originalTypes", "args", "transitions"] : []));
+  };
+
+  const handlePickCommand = (commandKey: string) => {
+    const spec = classifyReactionCommand(commandKey, commands);
+    if (spec.mode === "unsupported") return;
+    updateDraft((prev) => selectReactionCommand(prev, commandKey, commands));
+    clearBuckets("action", "args", "originalTypes", "transitions");
+  };
+
+  const handleSelectSenderMode = (mode: ReactionSenderMode) => {
+    updateDraft((prev) => selectSenderMode(prev, mode));
+    clearBuckets("senders");
+  };
+
+  const setCommandArg = (index: number, value: string) => {
+    updateDraft((prev) => {
+      const nextArgs = [...prev.commandArgs];
+      while (nextArgs.length <= index) nextArgs.push("");
+      nextArgs[index] = value;
+      return { ...prev, commandArgs: nextArgs };
+    });
+    clearBuckets("args", "action");
+  };
+
   const applyIssues = (issues: ReactionIssue[]) => {
     const next: Record<string, string> = {};
-    const form: string[] = [];
+    const formMessages: string[] = [];
     for (const issue of issues) {
       const message = issueMessage(t, issue.field, issue.code);
       const bucket = issueBucket(issue.field);
-      if (bucket === "form") form.push(message);
+      if (bucket === "form") formMessages.push(message);
       else next[bucket] = next[bucket] ? `${next[bucket]} ${message}` : message;
     }
     setFieldErrors(next);
-    setFormError(form.length ? form.join(" ") : null);
+    setFormError(formMessages.length ? formMessages.join(" ") : null);
   };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (submitPending.current) return;
-    const issues = reactionDraftIssues(draft);
+    const issues = reactionDraftIssues(draft, commands);
     if (
       draft.destination === "owner_private" &&
       !ownerLinked &&
@@ -270,10 +394,13 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
     applyIssues(issues);
     if (issues.length) return;
 
-    const body = draftToWrite({
-      ...draft,
-      priority: clampPriority(draft.priority),
-    });
+    const body = draftToWrite(
+      {
+        ...draft,
+        priority: clampPriority(draft.priority),
+      },
+      commands,
+    );
     const token = ++submitGen.current;
     const target = frozenSourceRef.current;
     const targetId = target?.id ?? null;
@@ -308,9 +435,9 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
         onConflict();
         return;
       }
-      const issues = reactionApiIssues(err);
-      if (issues.length) {
-        applyIssues(issues);
+      const apiIssues = reactionApiIssues(err);
+      if (apiIssues.length) {
+        applyIssues(apiIssues);
         return;
       }
       setFormError(errorMessage(t, err, "reactionSaveFailed"));
@@ -320,7 +447,19 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
     }
   };
 
-  const addSender = (jid: string) => {
+  const rememberName = (jid: string, displayTitle?: string) => {
+    if (!jid || !displayTitle || isRawJid(displayTitle)) return;
+    setPickedNames((prev) => {
+      if (prev.get(jid) === displayTitle) return prev;
+      const next = new Map(prev);
+      next.set(jid, displayTitle);
+      return next;
+    });
+    onRememberRecipient?.(jid, displayTitle);
+  };
+
+  const addSender = (jid: string, displayTitle?: string) => {
+    rememberName(jid, displayTitle);
     if (draft.senderIds.includes(jid)) return;
     if (draft.senderIds.length >= SENDERS_MAX) {
       setFieldErrors((prev) => ({ ...prev, senders: t("reactionTooManySenders") }));
@@ -328,6 +467,57 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
     }
     setField("senderIds", (previous) => (previous.includes(jid) ? previous : [...previous, jid]));
   };
+
+  const removeSender = (jid: string) => {
+    setField("senderIds", (previous) => previous.filter((item) => item !== jid));
+  };
+
+  const discardChanges = () => {
+    if (submitPending.current) return;
+    form.revert();
+    setFormError(null);
+    setFieldErrors({});
+  };
+
+  const selectedSpec = useMemo(
+    () => (draft.action ? classifyReactionCommand(draft.action, commands) : null),
+    [draft.action, commands],
+  );
+
+  const pickerItems = useMemo(
+    () => buildCommandPickerItems(commands, commandQuery, prefix),
+    [commands, commandQuery, prefix],
+  );
+
+  const allowedOriginalTypes: readonly ReactionOriginalType[] = useMemo(() => {
+    if (selectedSpec && selectedSpec.mode !== "unsupported" && selectedSpec.originalTypes.length) {
+      return selectedSpec.originalTypes;
+    }
+    return ORIGINAL_TYPES;
+  }, [selectedSpec]);
+
+  const liveArgValidation = useMemo(() => {
+    if (!selectedSpec || selectedSpec.mode !== "args") return null;
+    return validateReactionCommandArgs(draft.action, draft.commandArgs, commands);
+  }, [selectedSpec, draft.action, draft.commandArgs, commands]);
+
+  const activeSenderMode = resolveSenderMode(draft);
+  const senderOptions: RadioOption<ReactionSenderMode>[] = useMemo(() => {
+    const base: RadioOption<ReactionSenderMode>[] = TRIGGER_MODES.map((mode) => ({
+      value: mode,
+      label: senderModeLabel(t, mode),
+    }));
+    if (activeSenderMode === "custom") {
+      base.push({
+        value: "custom",
+        label: t("reactionRoleCustom"),
+      });
+    }
+    return base;
+  }, [activeSenderMode, t]);
+
+  const quoteNote = quoteNoteKey(selectedSpec);
+  const isDestructive = selectedSpec?.destructive === true;
 
   const emojiError =
     draft.emoji && !isReactionEmoji(draft.emoji) ? t("reactionEmojiInvalid") : fieldErrors.emoji;
@@ -341,8 +531,15 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
   ]
     .filter(Boolean)
     .join(" ");
-  const allTypes = ORIGINAL_TYPES.every((type) => draft.originalTypes.includes(type));
-  const chatLabel = peerLabel(draft.chatJid, names) || draft.chatName || t("reactionPreviewChat");
+  const allTypes = allowedOriginalTypes.every((type) => draft.originalTypes.includes(type));
+  const resolvedChatName =
+    peerLabel(draft.chatJid, mergedNames) ||
+    (!isRawJid(draft.chatName) ? draft.chatName : "") ||
+    (draft.chatJid
+      ? draft.chatJid.endsWith("@g.us")
+        ? t("recipientUnnamedGroup")
+        : t("recipientUnknownContact")
+      : t("reactionPreviewChat"));
   const close = () => {
     if (!submitPending.current) onClose();
   };
@@ -356,14 +553,9 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
         variant="mobileFullscreen"
         maxWidth="40rem"
         footer={
-          <>
-            <Button variant="secondary" onClick={close} disabled={busy}>
-              {t("reactionCancel")}
-            </Button>
-            <Button variant="primary" type="submit" form="reaction-rule-form" loading={busy}>
-              {t("reactionSave")}
-            </Button>
-          </>
+          <Button variant="secondary" onClick={close} disabled={busy}>
+            {t("reactionCancel")}
+          </Button>
         }
       >
         <form
@@ -382,7 +574,9 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
               1. {t("reactionChat")}
             </h3>
             <Field htmlFor="rx-chat" error={fieldErrors.chatJid}>
-              {draft.chatJid && <UserText className="text-sm font-semibold">{chatLabel}</UserText>}
+              {draft.chatJid && (
+                <UserText className="text-sm font-semibold">{resolvedChatName}</UserText>
+              )}
               <Button
                 id="rx-chat"
                 type="button"
@@ -395,6 +589,7 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
               </Button>
             </Field>
           </section>
+
           <section className="flex flex-col gap-2" aria-labelledby="rx-emoji-heading">
             <h3 id="rx-emoji-heading" className="text-sm font-bold text-text-main">
               2. {t("reactionEmoji")}
@@ -430,11 +625,27 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
               </div>
             </Field>
           </section>
+
           <section className="flex flex-col gap-2" aria-labelledby="rx-action-heading">
             <h3 id="rx-action-heading" className="text-sm font-bold text-text-main">
               3. {t("reactionAction")}
             </h3>
             <Field htmlFor="rx-action" error={fieldErrors.action}>
+              <div className="relative">
+                <Search
+                  size={16}
+                  className="pointer-events-none absolute start-3 top-3 text-muted"
+                />
+                <Input
+                  id="rx-command-search"
+                  type="search"
+                  value={commandQuery}
+                  onChange={(event) => setCommandQuery(event.target.value)}
+                  placeholder={t("reactionCommandSearch")}
+                  aria-label={t("reactionCommandSearch")}
+                  className="ps-9"
+                />
+              </div>
               <fieldset
                 id="rx-action"
                 className="min-w-0"
@@ -442,19 +653,97 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
                 aria-invalid={fieldErrors.action ? true : undefined}
                 aria-describedby={describedBy(fieldErrors.action ? "rx-action-message" : undefined)}
               >
-                <SegmentedControl<ReactionDraft["action"]>
-                  aria-label={t("reactionAction")}
-                  className="flex w-full flex-wrap"
-                  value={draft.action}
-                  onChange={(action) => setField("action", action)}
-                  options={[
-                    { value: "stt", label: t("reactionActionStt") },
-                    { value: "ping", label: t("reactionActionPing") },
-                  ]}
-                />
+                {pickerItems.length === 0 ? (
+                  <p className="py-2 text-xs text-muted">{t("reactionCommandNoResults")}</p>
+                ) : (
+                  <div className="flex max-h-64 flex-col gap-1.5 overflow-y-auto rounded-xl border border-line bg-panel-raised/40 p-2">
+                    {pickerItems.map((item) => {
+                      const itemId = item.key;
+                      const selected = draft.action === itemId;
+                      return (
+                        <Button
+                          key={itemId}
+                          type="button"
+                          variant="secondary"
+                          disabled={item.disabled}
+                          aria-pressed={selected}
+                          onClick={() => handlePickCommand(itemId)}
+                          className={`h-auto min-h-11 w-full items-start justify-between gap-2 px-3 py-2 text-start ${
+                            selected ? "border-brand-blue/50 bg-brand-blue/10" : ""
+                          }`}
+                        >
+                          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                            <span className="flex flex-wrap items-center gap-2">
+                              <CodeText className="text-xs font-bold text-brand-cyan">
+                                {item.token}
+                              </CodeText>
+                              {item.reasonKey && <Badge tone="neutral">{t(item.reasonKey)}</Badge>}
+                            </span>
+                            {item.description && (
+                              <UserText lines={2} className="text-xs text-muted">
+                                {item.description}
+                              </UserText>
+                            )}
+                          </span>
+                          {selected && (
+                            <span className="inline-flex shrink-0 items-center pt-0.5 text-brand-blue">
+                              <Check size={16} aria-hidden />
+                            </span>
+                          )}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                )}
               </fieldset>
             </Field>
+
+            {quoteNote && <p className="text-xs text-muted">{t(quoteNote)}</p>}
+
+            {isDestructive && (
+              <Callout tone="warn" title={t("reactionDestructiveTitle")}>
+                {t("reactionDestructiveWarning")}
+              </Callout>
+            )}
+
+            {selectedSpec?.mode === "args" && selectedSpec.fields.length > 0 && (
+              <div className="flex flex-col gap-2">
+                {selectedSpec.fields.map((field, index) => {
+                  const val = draft.commandArgs[index] ?? "";
+                  const liveCode = liveArgValidation?.fieldErrors[field.id];
+                  const showInline = val.length > 0 || Boolean(fieldErrors.args);
+                  const inlineErr = showInline
+                    ? (argFieldErrorMessage(t, field, liveCode) ?? fieldErrors.args)
+                    : undefined;
+                  const inputId = `rx-arg-${field.id}`;
+                  return (
+                    <Field
+                      key={field.id}
+                      label={t(commandFieldLabelKey(field.id))}
+                      htmlFor={inputId}
+                      error={inlineErr}
+                      description={fill(t("reactionArgCharLimit"), {
+                        n: val.length,
+                        max: field.maxLength,
+                      })}
+                    >
+                      <Input
+                        id={inputId}
+                        value={val}
+                        maxLength={field.maxLength}
+                        required={field.required}
+                        technical={field.id === "keyword" || field.id === "status"}
+                        aria-invalid={inlineErr ? true : undefined}
+                        aria-describedby={`${inputId}-message`}
+                        onChange={(event) => setCommandArg(index, event.target.value)}
+                      />
+                    </Field>
+                  );
+                })}
+              </div>
+            )}
           </section>
+
           <section className="flex flex-col gap-2" aria-labelledby="rx-types-heading">
             <h3 id="rx-types-heading" className="text-sm font-bold text-text-main">
               4. {t("reactionTypes")}
@@ -463,6 +752,10 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
               {draft.action === "stt" ? (
                 <p id="rx-types" className="text-sm text-muted">
                   {t("reactionSttVoiceOnly")}
+                </p>
+              ) : allowedOriginalTypes.length === 1 && allowedOriginalTypes[0] === "sticker" ? (
+                <p id="rx-types" className="text-sm text-muted">
+                  {t("reactionToimageStickerOnly")}
                 </p>
               ) : (
                 <fieldset
@@ -483,11 +776,14 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
                       }}
                       aria-invalid={fieldErrors.originalTypes ? true : undefined}
                       onChange={(event) =>
-                        setField("originalTypes", event.target.checked ? [...ORIGINAL_TYPES] : [])
+                        setField(
+                          "originalTypes",
+                          event.target.checked ? [...allowedOriginalTypes] : [],
+                        )
                       }
                     />
                   </div>
-                  {ORIGINAL_TYPES.map((value) => (
+                  {allowedOriginalTypes.map((value) => (
                     <Checkbox
                       key={value}
                       label={typeLabel(t, value)}
@@ -505,65 +801,77 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
               )}
             </Field>
           </section>
+
           <section className="flex flex-col gap-2" aria-labelledby="rx-senders-heading">
             <h3 id="rx-senders-heading" className="text-sm font-bold text-text-main">
               5. {t("reactionSendersRole")}
             </h3>
-            <Field label={t("reactionRole")} htmlFor="rx-role">
-              <Select
-                id="rx-role"
-                value={draft.role}
-                aria-invalid={fieldErrors.senders ? true : undefined}
-                aria-describedby={describedBy(
-                  fieldErrors.senders ? "rx-senders-message" : undefined,
-                )}
-                onChange={(event) => setField("role", event.target.value as ReactionDraft["role"])}
-              >
-                {SENDER_ROLES.map((value) => (
-                  <option key={value} value={value}>
-                    {roleLabel(t, value)}
-                  </option>
-                ))}
-              </Select>
-            </Field>
             <Field
-              label={t("reactionSendersIds")}
-              htmlFor="rx-senders"
-              description={t("reactionSendersIdsHint")}
+              htmlFor="rx-role"
+              description={t("reactionSendersPermissionHint")}
               error={fieldErrors.senders}
             >
-              {draft.senderIds.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {draft.senderIds.map((id) => {
-                    const label = peerLabel(id, names) || t("reactionUnknownPerson");
-                    return (
-                      <Chip
-                        key={id}
-                        removeLabel={fill(t("reactionRemoveSender"), { name: label })}
-                        onRemove={() =>
-                          setField("senderIds", (previous) =>
-                            previous.filter((item) => item !== id),
-                          )
-                        }
-                      >
-                        <UserText>{label}</UserText>
-                      </Chip>
-                    );
-                  })}
+              <fieldset
+                id="rx-role"
+                className="min-w-0"
+                aria-labelledby="rx-senders-heading"
+                aria-invalid={fieldErrors.senders ? true : undefined}
+                aria-describedby={describedBy(fieldErrors.senders ? "rx-role-message" : undefined)}
+              >
+                <RadioGroup
+                  name="rx-role"
+                  value={activeSenderMode}
+                  onChange={handleSelectSenderMode}
+                  options={senderOptions}
+                />
+              </fieldset>
+
+              {(activeSenderMode === "selected" ||
+                (activeSenderMode === "custom" && draft.senderIds.length > 0)) && (
+                <div className="flex flex-col gap-2 pt-1">
+                  {draft.senderIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {draft.senderIds.map((id) => {
+                        const label = peerLabel(id, mergedNames) || t("reactionUnknownPerson");
+                        return (
+                          <Chip
+                            key={id}
+                            removeLabel={fill(t("reactionRemoveSender"), { name: label })}
+                            onRemove={
+                              activeSenderMode === "selected" ? () => removeSender(id) : undefined
+                            }
+                          >
+                            <UserText>{label}</UserText>
+                          </Chip>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {activeSenderMode === "selected" && (
+                    <Button
+                      id="rx-senders"
+                      type="button"
+                      variant="secondary"
+                      aria-invalid={fieldErrors.senders ? true : undefined}
+                      aria-describedby="rx-role-message"
+                      onClick={() => setSenderPickerOpen(true)}
+                    >
+                      {t("reactionChooseSenders")}
+                    </Button>
+                  )}
                 </div>
               )}
-              <Button
-                id="rx-senders"
-                type="button"
-                variant="secondary"
-                aria-invalid={fieldErrors.senders ? true : undefined}
-                aria-describedby="rx-senders-message"
-                onClick={() => setSenderPickerOpen(true)}
-              >
-                {t("reactionChooseSenders")}
-              </Button>
             </Field>
+
+            <Toggle
+              id="rx-allow-others-linked"
+              checked={draft.allowOthersOnLinkedMessages}
+              onChange={(checked) => setField("allowOthersOnLinkedMessages", checked)}
+              label={t("reactionAllowOthersOnLinked")}
+              description={t("reactionAllowOthersOnLinkedHint")}
+            />
           </section>
+
           <section className="flex flex-col gap-2" aria-labelledby="rx-transitions-heading">
             <h3 id="rx-transitions-heading" className="text-sm font-bold text-text-main">
               6. {t("reactionTransitions")}
@@ -581,16 +889,19 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
                   <Checkbox
                     key={value}
                     label={transitionLabel(t, value)}
-                    checked={draft.transitions.includes(value)}
+                    checked={isDestructive ? value === "add" : draft.transitions.includes(value)}
+                    disabled={isDestructive}
                     aria-invalid={fieldErrors.transitions ? true : undefined}
-                    onChange={() =>
-                      setField("transitions", (previous) => toggleList(previous, value))
-                    }
+                    onChange={() => {
+                      if (isDestructive) return;
+                      setField("transitions", (previous) => toggleList(previous, value));
+                    }}
                   />
                 ))}
               </fieldset>
             </Field>
           </section>
+
           <section className="flex flex-col gap-2" aria-labelledby="rx-destination-heading">
             <h3 id="rx-destination-heading" className="text-sm font-bold text-text-main">
               7. {t("reactionDestination")}
@@ -624,6 +935,7 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
               </fieldset>
             </Field>
           </section>
+
           <Disclosure
             key={`${open}-${ruleId}`}
             summary={
@@ -658,11 +970,25 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
               />
             </Field>
           </Disclosure>
+
           <UserText as="p" className="text-sm text-muted">
-            {previewText(t, { ...draft, chatName: chatLabel })}
+            {previewText(t, { ...draft, chatName: resolvedChatName }, prefix)}
           </UserText>
+
+          <FormActions
+            dirty={form.dirty}
+            saving={busy || form.status === "saving"}
+            justSaved={form.status === "saved"}
+            error={errorBanner || form.error}
+            onDiscard={discardChanges}
+            saveLabel={t("reactionSave")}
+            discardLabel={t("discard")}
+            unsavedLabel={t("unsavedChanges")}
+            savedLabel={t("saved")}
+          />
         </form>
       </Dialog>
+
       <RecipientPicker
         open={chatPickerOpen}
         onClose={() => setChatPickerOpen(false)}
@@ -670,26 +996,30 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
         includeGroups
         selectedIds={draft.chatJid ? [draft.chatJid] : []}
         emptyText={t("reactionNoChats")}
-        onPick={(jid) => {
-          setDraft((prev) => ({ ...prev, chatJid: jid, chatName: peerLabel(jid, names) }));
-          setFieldErrors((prev) => {
-            if (!prev.chatJid) return prev;
-            const next = { ...prev };
-            delete next.chatJid;
-            return next;
-          });
+        onPick={(jid, _item, displayTitle) => {
+          rememberName(jid, displayTitle);
+          const cleanTitle =
+            displayTitle && !isRawJid(displayTitle) ? displayTitle : peerLabel(jid, mergedNames);
+          updateDraft((prev) => ({
+            ...prev,
+            chatJid: jid,
+            chatName: cleanTitle,
+          }));
+          clearBuckets("chatJid");
           setChatPickerOpen(false);
-          setFormError(null);
         }}
       />
+
       <RecipientPicker
         open={senderPickerOpen}
         onClose={() => setSenderPickerOpen(false)}
         title={t("reactionChooseSenders")}
         includeGroups={false}
+        multiSelect
         selectedIds={draft.senderIds}
         emptyText={t("reactionNoContacts")}
-        onPick={(jid) => addSender(jid)}
+        onPick={(jid, _item, displayTitle) => addSender(jid, displayTitle)}
+        onToggle={(jid) => removeSender(jid)}
       />
     </>
   );
