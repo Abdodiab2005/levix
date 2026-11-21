@@ -341,7 +341,9 @@ section(
   });
   equal("initially resolves phone for LID_A", store.resolveUserPhone(LID_A), "201044444444");
 
-  // PN_Y is now assigned to LID_B at a later timestamp
+  // PN_Y is now assigned to LID_B at a later timestamp. Equal updated_at
+  // values are ambiguous by design, so wait for the clock to move.
+  await new Promise((resolve) => setTimeout(resolve, 5));
   store.storeLidPnMapping(LID_B, PN_Y);
   equal(
     "resolveUserPhone rejects LID_A because reverse link now points to LID_B",

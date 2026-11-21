@@ -22,6 +22,8 @@ const {
   storeUnsolicitedFullRoster,
 } = require("../utils/groupMetadataCache.cjs");
 
+const REPLAYED_OWN_NAME_TTL_MS = 60_000;
+
 /**
  * Wire one socket up.
  *
@@ -118,8 +120,34 @@ export function setupEventListeners(
   // Save credentials
   if (saveCreds) listen(sock.ev, "creds.update", saveCreds);
 
-  // The linked account's own display name from its live messages.
-  // Fenced to the live socket generation; the disposer removes it on detach.
+  // Recent pushNames seen on non-notify (replayed/history) own messages. Baileys
+  // emits the same `creds.update { me: { name } }` for a replayed own message as
+  // for a real app-state `pushNameSetting` rename, and may flush the upsert in
+  // the same batch after `creds.update`. Deferring the creds check by one tick
+  // lets the upsert be recorded first so replays are ignored while real renames
+  // update the stored owner name.
+  const replayedOwnNames = new Map();
+  const pendingCredsNameTimers = new Set();
+  const recordReplayedOwnName = (name) => {
+    const now = Date.now();
+    for (const [entry, expiresAt] of replayedOwnNames) {
+      if (expiresAt <= now) replayedOwnNames.delete(entry);
+    }
+    replayedOwnNames.set(name, now + REPLAYED_OWN_NAME_TTL_MS);
+  };
+  const isReplayedOwnName = (name) => {
+    const expiresAt = replayedOwnNames.get(name);
+    if (expiresAt === undefined) return false;
+    if (expiresAt <= Date.now()) {
+      replayedOwnNames.delete(name);
+      return false;
+    }
+    return true;
+  };
+
+  // The linked account's own display name from its live messages and verified
+  // app-state renames. Fenced to the live socket generation; the disposer
+  // removes it on detach.
   const ownerName = (candidate) => {
     if (!isLive() || !candidate) return;
     try {
@@ -128,6 +156,22 @@ export function setupEventListeners(
       logger.warn({ err }, "[User Metadata] owner display name update failed");
     }
   };
+  // Baileys also emits `creds.update` with the unchanged persisted `me.name` on
+  // connection open, edge routing, and props hash refreshes; only a changed name
+  // enters the deferred replay check.
+  let lastCredsName = cleanOwnerName(sock?.authState?.creds?.me?.name);
+  listen(sock.ev, "creds.update", (update) => {
+    const candidate = cleanOwnerName(update?.me?.name);
+    if (!candidate || !isLive()) return;
+    if (candidate === lastCredsName) return;
+    lastCredsName = candidate;
+    const timer = setTimeout(() => {
+      pendingCredsNameTimers.delete(timer);
+      if (!isLive() || isReplayedOwnName(candidate)) return;
+      ownerName(candidate);
+    }, 0);
+    pendingCredsNameTimers.add(timer);
+  });
 
   // Address-book names (`name`) and push names (`notify`) from the linked phone.
   // No history sync — these events are the live contact list WhatsApp already
@@ -191,10 +235,16 @@ export function setupEventListeners(
   listen(sock.ev, "messages.upsert", (m) => {
     intake("messages.upsert", (payload) => reactions.observeUpsert(payload))(m);
     contained("messages.upsert", (payload) => handleIncomingMessage(sock, payload))(m);
+    const list = Array.isArray(m?.messages) ? m.messages : [];
     if (m?.type === "notify") {
-      const list = Array.isArray(m?.messages) ? m.messages : [];
       const own = list.find((msg) => msg?.key?.fromMe && cleanOwnerName(msg.pushName));
       if (own) ownerName(cleanOwnerName(own.pushName));
+    } else {
+      for (const msg of list) {
+        if (!msg?.key?.fromMe) continue;
+        const replayed = cleanOwnerName(msg.pushName);
+        if (replayed) recordReplayedOwnName(replayed);
+      }
     }
   });
 
@@ -239,6 +289,9 @@ export function setupEventListeners(
 
   return () => {
     disposed = true;
+    for (const timer of pendingCredsNameTimers) clearTimeout(timer);
+    pendingCredsNameTimers.clear();
+    replayedOwnNames.clear();
     for (const [emitter, event, fn] of bindings) {
       try {
         emitter.off?.(event, fn);
