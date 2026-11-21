@@ -1,6 +1,7 @@
 // One command engine: a reaction runs the same command a typed message runs.
 import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { registerHooks } from "node:module";
 import { equal, finish, ok, require, section, throws, useTempDataDir } from "./harness.mjs";
 
@@ -186,6 +187,7 @@ async function fixture({
     },
     async groupParticipantsUpdate(chatId, ids, action) {
       state.updates.push({ chat: chatId, ids, action });
+      if (typeof state.onParticipantsUpdate === "function") state.onParticipantsUpdate(ids, action);
       return [{ status: "200" }];
     },
     async sendPresenceUpdate() {},
@@ -1034,6 +1036,73 @@ try {
     equal("one removal after the target rejoins", f.state.updates.length, 1);
   }
 
+  section("an evicted stanza redelivered under a phone jid cannot kick twice");
+  {
+    const lid = "201070000888@lid";
+    const phone = "201070000888@s.whatsapp.net";
+    const f = await fixture({
+      rules: [{ id: "kick", definition: commandDefinition("group:kick", { emoji: "🫰" }) }],
+    });
+    f.state.participants = [
+      { id: lid },
+      { id: reactor, admin: "admin" },
+      { id: bot, admin: "admin" },
+      { id: admin2, admin: "admin" },
+    ];
+    const message = remember(f, original({ sender: lid }));
+    equal("lid original is cached", f.engine.intake.stats().items, 1);
+    receive(f, message, "🫰", reactor);
+    equal("lid removal delivers", await completed(f), "DELIVERED");
+    equal("lid removal runs once", f.state.updates.length, 1);
+    f.engine.intake.resetLookup();
+    equal("eviction drops the cached original", f.engine.intake.stats().items, 0);
+    const redelivered = {
+      key: { ...message.key, participant: phone },
+      messageTimestamp: Math.floor(clock / 1000),
+      message: message.message,
+    };
+    f.engine.intake.observeUpsert({ type: "notify", messages: [redelivered] });
+    equal("phone redelivery caches the same stanza", f.engine.intake.stats().items, 1);
+    f.state.participants = f.state.participants.filter((row) => row.id !== lid);
+    f.state.participants.push({ id: phone });
+    receive(f, redelivered, "🫰", admin2);
+    equal("phone redelivery does not remove again", await completed(f), "DUPLICATE");
+    equal("one removal after eviction and rejoin", f.state.updates.length, 1);
+  }
+
+  section("a confirmed reaction kick announces once after the member is gone");
+  {
+    const f = await fixture({
+      rules: [{ id: "kick", definition: commandDefinition("group:kick", { emoji: "🫰" }) }],
+    });
+    markAdmins(f);
+    f.state.participants.push({ id: admin2, admin: "admin" });
+    f.state.onParticipantsUpdate = (ids, action) => {
+      if (action !== "remove") return;
+      const gone = new Set(ids);
+      f.state.participants = f.state.participants.filter((row) => !gone.has(row.id));
+    };
+    const message = remember(f);
+    receive(f, message, "🫰", reactor);
+    const announcements = () =>
+      f.state.sent.filter((row) => String(row.content?.text || "").includes("*Action:* kick"))
+        .length;
+    equal("removal delivers", await completed(f), "DELIVERED");
+    equal("removal runs once", f.state.updates.length, 1);
+    equal(
+      "the removed author is gone",
+      f.state.participants.some((row) => row.id === author),
+      false,
+    );
+    equal("the removal posts one announcement", announcements(), 1);
+    equal("the announcement stays in the group", f.state.sent[0].chat, group);
+    f.state.participants.push({ id: author });
+    receive(f, message, "🫰", admin2);
+    equal("a second admin does not remove again", await completed(f), "DUPLICATE");
+    equal("a second admin does not remove", f.state.updates.length, 1);
+    equal("a second admin posts no announcement", announcements(), 1);
+  }
+
   section("disabling group refuses !group kick and leaves !kick alone");
   {
     const f = await fixture({
@@ -1563,6 +1632,111 @@ try {
     equal("engine STT switch sends nothing", engine.state.sent.length, 0);
     equal("engine STT switch does not download", downloaded, 0);
     equal("engine STT switch does not claim", count("reaction_executions"), 0);
+  }
+
+  section("reaction STT re-checks the switch while endpoint validation is pending");
+  {
+    const providerUrl = require("./src/utils/providerUrl.cjs");
+    const realAssert = providerUrl.assertProviderRequestUrl;
+    const uploads = { n: 0 };
+    let release = () => {};
+    let server;
+    try {
+      server = createServer((req, res) => {
+        uploads.n += 1;
+        req.resume();
+        req.on("end", () => {
+          if (res.writableEnded) return;
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(
+            JSON.stringify({
+              candidates: [
+                {
+                  content: { parts: [{ text: "typed transcript" }], role: "model" },
+                  finishReason: "STOP",
+                },
+              ],
+            }),
+          );
+        });
+      });
+      await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const address = server.address();
+      const f = await fixture();
+      settings.set("gemini_base_url", `http://127.0.0.1:${address.port}`);
+      settings.set("gemini_api_key", "isolated-validation-key");
+      settings.set("ai_stt_enabled", true);
+      settings.set("ai_stt_provider", "gemini");
+      stt.transcribe = saved.transcribe;
+      const started = new Promise((resolve) => {
+        providerUrl.assertProviderRequestUrl = async (...args) => {
+          resolve("entered");
+          await new Promise((done) => {
+            release = done;
+          });
+          return realAssert.apply(providerUrl, args);
+        };
+      });
+      const quote = {
+        key: {
+          remoteJid: group,
+          id: `stt-admit-${++sequence}`,
+          fromMe: false,
+          participant: reactor,
+        },
+        message: {
+          extendedTextMessage: {
+            text: `${prefix()}stt`,
+            contextInfo: { quotedMessage: voiceMessage() },
+          },
+        },
+      };
+      const pending = saved
+        .stt(f.socket, quote, [], `${prefix()}stt`, null, { source: "reaction" })
+        .then(
+          () => ({ error: null }),
+          (error) => ({ error }),
+        );
+      const saw = await Promise.race([
+        started,
+        new Promise((resolve) => setTimeout(() => resolve("timeout"), 1000)),
+      ]);
+      equal("endpoint validation started", saw, "entered");
+      settings.set("ai_stt_enabled", false);
+      release();
+      const outcome = await Promise.race([
+        pending,
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ error: new Error("TEST_TIMEOUT") }), 5000),
+        ),
+      ]);
+      equal(
+        "switch flipped during validation stops the upload",
+        outcome.error?.message,
+        "REACTION_STT_DISABLED",
+      );
+      equal("validation re-check does not upload", uploads.n, 0);
+
+      providerUrl.assertProviderRequestUrl = realAssert;
+      let typedError = null;
+      try {
+        await saved.transcribe(audioBytes, "audio/ogg");
+      } catch (error) {
+        typedError = error;
+      }
+      ok("typed transcription still reaches the endpoint", uploads.n >= 1);
+      const reactionSwitch =
+        typedError?.message === "REACTION_STT_DISABLED" ||
+        typedError?.code === "REACTION_STT_DISABLED";
+      equal("typed transcription ignores the reaction switch", reactionSwitch, false);
+    } finally {
+      release();
+      providerUrl.assertProviderRequestUrl = realAssert;
+      settings.set("gemini_base_url", "");
+      settings.set("ai_stt_enabled", true);
+      settings.set("gemini_api_key", "isolated-test-key");
+      if (server) await new Promise((resolve) => server.close(resolve));
+    }
   }
 
   section("rule destination overrides the global route");

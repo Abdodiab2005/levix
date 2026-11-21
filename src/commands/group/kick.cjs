@@ -75,11 +75,15 @@ module.exports = {
         member,
         reason,
       });
-      const announce = () =>
-        sock.sendMessage(groupId, {
-          text: kickMessage,
-          mentions: [targetJid],
-        });
+      const announce = (receipt) =>
+        sock.sendMessage(
+          groupId,
+          {
+            text: kickMessage,
+            mentions: [targetJid],
+          },
+          receipt ? { receipt: true } : undefined,
+        );
       const remove = () =>
         moderationAction.kickGroupMember(sock, {
           groupId,
@@ -101,11 +105,11 @@ module.exports = {
           await sock.sendMessage(groupId, { text: t("bot.group.kick.failed") });
           return;
         }
-        await announce();
+        await announce(true);
         return;
       }
 
-      await announce();
+      await announce(false);
       const result = await remove();
       if (!result.kicked) {
         if (ctx?.silentDenials) reactionRefusal();
