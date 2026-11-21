@@ -190,6 +190,19 @@ section("review fixes: status kept on failure, switch waits for its value, tab f
   ok("PlusPage shows a spinner until the value is read", /if \(enabled === null\) return <Spinner/.test(page));
   const features = read("frontend/src/views/plus/PlusFeaturesView.tsx");
   ok("changing the Plus tab updates #plus/<tab>", /replaceState\(null, "", plusHash\(next\)\)/.test(features));
+  const plusSettings = read("frontend/src/views/settings/PlusSettings.tsx");
+  ok(
+    "PlusSettings gates PlusFeaturesView with accessFromStatus === active",
+    /accessFromStatus\(status, available\) === "active" && <PlusFeaturesView \/>/.test(plusSettings) &&
+      !/status\.extension\.state === "active" && <PlusFeaturesView \/>/.test(plusSettings),
+  );
+  ok(
+    "PlusFeaturesView gates tabs with accessFromStatus and refreshes through usePlusStatus",
+    /accessFromStatus\(status, available\) !== "active"/.test(features) &&
+      /usePlusStatus\(\)/.test(features) &&
+      !/readPlusStatus/.test(features) &&
+      !/useState\(false\)/.test(features),
+  );
 }
 
 finish();

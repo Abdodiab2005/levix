@@ -124,7 +124,7 @@ export function AutoReplyChatEditor({
               {t("cancel")}
             </Button>
             <Button variant="primary" type="submit" form="plus-auto-reply-chat">
-              {t("save")}
+              {t("plusAutoReplyApply")}
             </Button>
           </>
         }

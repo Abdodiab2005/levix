@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   addAutoReplyChat,
   addExcludedChat,
+  autoReplyFormDataFrom,
   createLatestReader,
   createRecoveryRefreshGate,
   createRequestGeneration,
@@ -11,12 +12,17 @@ import {
   fallbackRecipientForJid,
   filterAndSortTemplateKeys,
   getDraftText,
+  hasSamplePlaceholderValue,
+  humanizePlaceholder,
   presetDisplayCopy,
   RECOVERY_REFRESH_COOLDOWN_MS,
+  reconcileAutoReplyDraft,
   recoverPlusPurchases,
   removeAutoReplyChat,
   removeExcludedChat,
   samplePlaceholderValue,
+  saveAutoReplyForm,
+  saveAutoReplyPatch,
   setAutoReplyScopeMode,
   showsPlusUntil,
   substitutePlaceholders,
@@ -24,6 +30,7 @@ import {
 } from "../frontend/src/views/plus/plusUiLogic.ts";
 import {
   DEFAULT_AUTO_REPLY_POLICY,
+  isAutoReplyRevision,
   normalizeAutoReplyConfig,
 } from "../frontend/src/views/plus/types.ts";
 import { equal, finish, ok, ROOT, section } from "./harness.mjs";
@@ -36,20 +43,30 @@ section("U3: placeholder samples and template preview substitution");
 equal("sample value for name is Levix", samplePlaceholderValue("name"), "Levix");
 equal("sample value for count is 3", samplePlaceholderValue("count"), "3");
 equal(
-  "sample value for other placeholder is wrapped in angle brackets",
+  "sample value for command is a readable command sample",
   samplePlaceholderValue("command"),
-  "<command>",
+  "!help",
 );
 equal(
-  "sample value for reason is wrapped in angle brackets",
+  "sample value for reason is readable text",
   samplePlaceholderValue("reason"),
-  "<reason>",
+  "Contains a forbidden word",
+);
+equal(
+  "unknown placeholder is humanized into words without angle brackets",
+  samplePlaceholderValue("customMetricName"),
+  "Custom metric name",
+);
+equal(
+  "humanizePlaceholder splits camelCase and snake_case",
+  humanizePlaceholder("max_chatCount"),
+  "Max chat count",
 );
 
 equal(
-  "substitutes name, count, and unknown placeholders in template",
+  "substitutes name, count, command and reason in template with readable samples",
   substitutePlaceholders("Hello {name}! You have {count} attempts left for {command} ({reason})."),
-  "Hello Levix! You have 3 attempts left for <command> (<reason>).",
+  "Hello Levix! You have 3 attempts left for !help (Contains a forbidden word).",
 );
 
 equal(
@@ -754,10 +771,11 @@ section("U6: excluded list and selected chat list add/remove pure helpers");
   equal("remaining chat is the group", remainingChats[0].jid, "120363123456789@g.us");
 }
 
-section("U7: preview rendering never shows a raw placeholder");
+section("U7: preview rendering never shows a raw placeholder or angle-bracket token");
 
 {
   const rawPlaceholderPattern = /\{[A-Za-z_][A-Za-z0-9_]*\}/;
+  const angleTokenPattern = /<[A-Za-z_][A-Za-z0-9_]*>/;
   equal(
     "sample value for quotedText is friendly text",
     samplePlaceholderValue("quotedText"),
@@ -782,11 +800,13 @@ section("U7: preview rendering never shows a raw placeholder");
     const rendered = visibleTemplatePreview(templateItem, loc);
     ok(`${loc}: preview is non-empty`, rendered.length > 0);
     ok(`${loc}: preview never contains a raw {placeholder}`, !rawPlaceholderPattern.test(rendered));
+    ok(`${loc}: preview never contains a <token>`, !angleTokenPattern.test(rendered));
     ok(`${loc}: preview does not contain {quotedText}`, !rendered.includes("{quotedText}"));
     ok(`${loc}: preview does not contain {count}`, !rendered.includes("{count}"));
   }
 
-  // Verify every bot catalog template across all locales renders without raw placeholders.
+  // Walk every placeholder in every bot catalog across all four locales.
+  const catalogPlaceholders = new Set();
   for (const loc of ["en", "ar", "pt-BR", "es-419"]) {
     const botDir = join(ROOT, "i18n", loc, "bot");
     for (const file of readdirSync(botDir)) {
@@ -794,14 +814,31 @@ section("U7: preview rendering never shows a raw placeholder");
       const entries = JSON.parse(readFileSync(join(botDir, file), "utf8"));
       for (const [key, val] of Object.entries(entries)) {
         if (typeof val !== "string") continue;
+        for (const match of val.matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g)) {
+          catalogPlaceholders.add(match[1]);
+        }
         const preview = substitutePlaceholders(val);
+        // Usage lines such as `!debt del <id>` are catalog text; a sample must add no new <token>.
+        const angleTokens = (text) => (text.match(new RegExp(angleTokenPattern, "g")) ?? []).length;
         ok(
-          `${loc}/${file}:${key} preview has no raw placeholder`,
-          !rawPlaceholderPattern.test(preview),
+          `${loc}/${file}:${key} preview has no raw placeholder and adds no <token>`,
+          !rawPlaceholderPattern.test(preview) && angleTokens(preview) <= angleTokens(val),
           preview,
         );
       }
     }
+  }
+  ok("bot catalogs contain placeholders", catalogPlaceholders.size > 0);
+  for (const name of [...catalogPlaceholders].sort()) {
+    const sample = samplePlaceholderValue(name);
+    ok(
+      `catalog placeholder {${name}} has a curated readable sample`,
+      hasSamplePlaceholderValue(name) &&
+        sample.trim().length > 0 &&
+        !rawPlaceholderPattern.test(sample) &&
+        !angleTokenPattern.test(sample),
+      sample,
+    );
   }
 }
 
@@ -979,6 +1016,270 @@ section(
     "MessagesTab does not render raw TemplateBody tokens in list rows",
     !messagesSource.includes("<TemplateBody"),
   );
+  ok(
+    'MessagesTab passes titleLines={open ? "none" : 2} to ListRow',
+    messagesSource.includes('titleLines={open ? "none" : 2}'),
+  );
+  const listRowSource = readFileSync(join(ROOT, "frontend/src/components/ui/list-row.tsx"), "utf8");
+  ok(
+    "ListRow supports titleLines prop defaulting to 2 and allowing none",
+    listRowSource.includes("titleLines = 2") && listRowSource.includes('none: ""'),
+  );
+}
+
+section("F1: optimistic revision on Auto Reply saves and 409 CONFLICT recovery");
+
+{
+  equal("0 is a valid Auto Reply revision", isAutoReplyRevision(0), true);
+  equal("7 is a valid Auto Reply revision", isAutoReplyRevision(7), true);
+  equal("-1 is not a valid revision", isAutoReplyRevision(-1), false);
+  equal("1.5 is not a valid revision", isAutoReplyRevision(1.5), false);
+  equal("undefined is not a valid revision", isAutoReplyRevision(undefined), false);
+
+  const baseDoc = normalizeAutoReplyConfig({
+    schemaVersion: 1,
+    enabled: true,
+    killSwitch: false,
+    globalPerHour: 30,
+    scopeMode: "except",
+    groupsEnabled: false,
+    chats: [],
+    excludedChats: [],
+    policy: DEFAULT_AUTO_REPLY_POLICY,
+    revision: 1,
+  });
+  equal("normalizeAutoReplyConfig preserves a valid revision", baseDoc.revision, 1);
+
+  const withoutRevision = normalizeAutoReplyConfig({
+    schemaVersion: 1,
+    enabled: true,
+    killSwitch: false,
+    globalPerHour: 30,
+    scopeMode: "except",
+    groupsEnabled: false,
+    chats: [],
+  });
+  equal(
+    "normalizeAutoReplyConfig omits revision when runtime did not report one",
+    Object.hasOwn(withoutRevision, "revision"),
+    false,
+  );
+
+  // Tab A saves an exclusion (server moves from revision 1 to 2).
+  // Tab B still holds revision 1 and flips groupsEnabled to true.
+  let serverDoc = {
+    ...baseDoc,
+    excludedChats: ["201555555555@s.whatsapp.net"],
+    revision: 2,
+  };
+  const puts = [];
+  let loads = 0;
+
+  const put = async (body) => {
+    puts.push(body);
+    if (body.revision !== serverDoc.revision) {
+      const err = new Error("CONFLICT");
+      err.code = "CONFLICT";
+      throw err;
+    }
+    serverDoc = {
+      ...body,
+      revision: serverDoc.revision + 1,
+    };
+    return serverDoc;
+  };
+  const load = async () => {
+    loads += 1;
+    return serverDoc;
+  };
+  const isConflict = (err) => Boolean(err && err.code === "CONFLICT");
+
+  const toggleOutcome = await saveAutoReplyPatch({
+    current: baseDoc, // stale revision 1 with excludedChats: []
+    patch: () => ({ groupsEnabled: true }),
+    put,
+    load,
+    isConflict,
+  });
+
+  equal("toggle detected conflict and reloaded once", toggleOutcome.reloaded, true);
+  equal("load called once on conflict", loads, 1);
+  equal("put called twice (initial stale attempt + retry on fresh)", puts.length, 2);
+  equal("first put carried stale revision 1", puts[0].revision, 1);
+  equal("second put carried reloaded revision 2", puts[1].revision, 2);
+  deepEqual(
+    "toggle retry preserved Tab A's excludedChats instead of overwriting with stale []",
+    toggleOutcome.config.excludedChats,
+    ["201555555555@s.whatsapp.net"],
+  );
+  equal("toggle retry applied groupsEnabled: true", toggleOutcome.config.groupsEnabled, true);
+  equal("toggle retry returned new revision 3", toggleOutcome.config.revision, 3);
+
+  // Full-form save on stale revision: reloads without overwriting and reports conflict.
+  const staleFormBase = { ...baseDoc, revision: 1 };
+  const putCountBeforeForm = puts.length;
+  const formConflict = await saveAutoReplyForm({
+    current: staleFormBase,
+    patch: () => ({ globalPerHour: 99, excludedChats: [] }),
+    put,
+    load,
+    isConflict,
+  });
+
+  equal("full-form conflict returns ok: false", formConflict.ok, false);
+  if (!formConflict.ok) {
+    equal("full-form conflict sets conflict: true", formConflict.conflict, true);
+    equal(
+      "full-form conflict made only 1 PUT attempt (never overwrites silently)",
+      puts.length,
+      putCountBeforeForm + 1,
+    );
+    equal("full-form conflict returns reloaded server revision 3", formConflict.config.revision, 3);
+    deepEqual(
+      "full-form conflict returns server's excludedChats intact",
+      formConflict.config.excludedChats,
+      ["201555555555@s.whatsapp.net"],
+    );
+    equal("server globalPerHour was not overwritten by stale form", serverDoc.globalPerHour, 30);
+  }
+
+  // Full-form save with current revision succeeds cleanly.
+  const formOk = await saveAutoReplyForm({
+    current: serverDoc,
+    patch: () => ({ globalPerHour: 75 }),
+    put,
+    load,
+    isConflict,
+  });
+  equal("up-to-date full-form save returns ok: true", formOk.ok, true);
+  equal("up-to-date full-form save updates globalPerHour", formOk.config.globalPerHour, 75);
+  equal("up-to-date full-form save increments revision to 4", formOk.config.revision, 4);
+}
+
+section("F3: Auto Reply draft reconciliation and per-chat Apply label");
+
+{
+  const b0 = autoReplyFormDataFrom(
+    normalizeAutoReplyConfig({
+      schemaVersion: 1,
+      enabled: true,
+      killSwitch: false,
+      globalPerHour: 30,
+      scopeMode: "except",
+      groupsEnabled: false,
+      chats: [],
+      excludedChats: [],
+      policy: DEFAULT_AUTO_REPLY_POLICY,
+      revision: 1,
+    }),
+  );
+
+  // 1. User types instructions with trailing whitespace and submits; server trims it.
+  const submitted = {
+    ...b0,
+    policy: { ...b0.policy, instructions: "Be concise.  " },
+  };
+  const b1 = {
+    ...b0,
+    policy: { ...b0.policy, instructions: "Be concise." },
+  };
+  const afterCleanSave = reconcileAutoReplyDraft({
+    draft: submitted,
+    previousBaseline: b0,
+    nextBaseline: b1,
+    submittedDraft: submitted,
+    conflictReload: false,
+  });
+  equal(
+    "clean save adopts server-trimmed instructions so form is not left dirty",
+    afterCleanSave.policy.instructions,
+    "Be concise.",
+  );
+
+  // 2. If a field changes while a Save is in flight, reconciliation against submittedDraft keeps it.
+  const editedDuringSave = {
+    ...submitted,
+    scopeMode: "all",
+  };
+  const afterConcurrentEdit = reconcileAutoReplyDraft({
+    draft: editedDuringSave,
+    previousBaseline: b0,
+    nextBaseline: b1,
+    submittedDraft: submitted,
+    conflictReload: false,
+  });
+  equal(
+    "edit made after submission is preserved when the save response arrives",
+    afterConcurrentEdit.scopeMode,
+    "all",
+  );
+  equal(
+    "unmodified field adopts the saved baseline",
+    afterConcurrentEdit.policy.instructions,
+    "Be concise.",
+  );
+
+  // 3. On a 409 conflict reload of a full-form save, the draft resets to the reloaded baseline.
+  const reloadedBaseline = {
+    ...b0,
+    excludedChats: ["201555555555@s.whatsapp.net"],
+    globalPerHour: 45,
+  };
+  const afterConflictReload = reconcileAutoReplyDraft({
+    draft: { ...b0, globalPerHour: 99 },
+    previousBaseline: b0,
+    nextBaseline: reloadedBaseline,
+    submittedDraft: { ...b0, globalPerHour: 99 },
+    conflictReload: true,
+  });
+  deepEqual(
+    "conflict reload resets draft to the reloaded server baseline",
+    afterConflictReload,
+    reloadedBaseline,
+  );
+
+  // Static checks on AutoReplyTab.tsx and AutoReplyChatEditor.tsx
+  const autoReplyTabSource = readFileSync(
+    join(ROOT, "frontend/src/views/plus/AutoReplyTab.tsx"),
+    "utf8",
+  );
+  ok(
+    "AutoReplyTab uses saveAutoReplyPatch for toggles",
+    autoReplyTabSource.includes("saveAutoReplyPatch("),
+  );
+  ok(
+    "AutoReplyTab uses saveAutoReplyForm for form saves",
+    autoReplyTabSource.includes("saveAutoReplyForm("),
+  );
+  ok(
+    "AutoReplyTab uses reconcileAutoReplyDraft",
+    autoReplyTabSource.includes("reconcileAutoReplyDraft("),
+  );
+  ok(
+    "AutoReplyTab disables draft controls while saving",
+    autoReplyTabSource.includes("disabled={formSaving}"),
+  );
+
+  const chatEditorSource = readFileSync(
+    join(ROOT, "frontend/src/views/plus/AutoReplyChatEditor.tsx"),
+    "utf8",
+  );
+  ok(
+    "AutoReplyChatEditor labels its draft action with plusAutoReplyApply",
+    chatEditorSource.includes('t("plusAutoReplyApply")') && !chatEditorSource.includes('t("save")'),
+  );
+
+  for (const loc of ["en", "ar", "pt-BR", "es-419"]) {
+    const catalog = JSON.parse(readFileSync(join(ROOT, "i18n", loc, "dashboard.json"), "utf8"));
+    ok(
+      `${loc}: plusExtErrorConflict is translated`,
+      typeof catalog.plusExtErrorConflict === "string" && catalog.plusExtErrorConflict.length > 0,
+    );
+    ok(
+      `${loc}: plusAutoReplyApply is translated`,
+      typeof catalog.plusAutoReplyApply === "string" && catalog.plusAutoReplyApply.length > 0,
+    );
+  }
 }
 
 finish();

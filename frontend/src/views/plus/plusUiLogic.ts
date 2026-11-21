@@ -7,10 +7,12 @@ import {
 } from "../../utils/recipientLabel.ts";
 import {
   type AutoReplyChat,
+  type AutoReplyConfig,
   type AutoReplyPolicy,
   type AutoReplyScopeMode,
   CHAT_JID_PATTERN,
   DEFAULT_AUTO_REPLY_POLICY,
+  normalizeAutoReplyConfig,
   PLUS_LIMITS,
   type PlusLocale,
   type PlusPreset,
@@ -171,43 +173,344 @@ export function createWriteQueue(): WriteQueue {
   };
 }
 
+export interface AutoReplySaveDeps {
+  /** The document this tab holds, revision included. */
+  current: AutoReplyConfig;
+  /** The change to apply, computed from the document it is applied to. */
+  patch: (current: AutoReplyConfig) => Partial<AutoReplyConfig>;
+  put: (body: AutoReplyConfig) => Promise<AutoReplyConfig>;
+  load: () => Promise<AutoReplyConfig>;
+  isConflict: (error: unknown) => boolean;
+}
+
+/**
+ * Saves one Auto Reply change with the revision this tab holds. A 409 CONFLICT
+ * means another tab saved first: reload the stored document, then re-apply only
+ * this change on top of it, so a toggle never reopens an exclusion somebody
+ * else just added. Any other failure is the caller's to report.
+ */
+export async function saveAutoReplyPatch({
+  current,
+  patch,
+  put,
+  load,
+  isConflict,
+}: AutoReplySaveDeps): Promise<{ config: AutoReplyConfig; reloaded: boolean }> {
+  const send = (base: AutoReplyConfig) => put(normalizeAutoReplyConfig(base, patch(base)));
+  try {
+    return { config: normalizeAutoReplyConfig(await send(current)), reloaded: false };
+  } catch (error) {
+    if (!isConflict(error)) throw error;
+  }
+  const fresh = normalizeAutoReplyConfig(await load());
+  return { config: normalizeAutoReplyConfig(await send(fresh)), reloaded: true };
+}
+
+export type AutoReplyFormSaveResult =
+  | { ok: true; config: AutoReplyConfig }
+  | { ok: false; conflict: true; config: AutoReplyConfig; error: unknown };
+
+/**
+ * Saves the full Auto Reply form with the revision this tab holds. On 409
+ * CONFLICT it reloads the stored document and returns `conflict: true` without
+ * re-sending the stale form, so the caller resets to the reloaded document and
+ * displays the translated conflict message.
+ */
+export async function saveAutoReplyForm({
+  current,
+  patch,
+  put,
+  load,
+  isConflict,
+}: AutoReplySaveDeps): Promise<AutoReplyFormSaveResult> {
+  try {
+    const saved = await put(normalizeAutoReplyConfig(current, patch(current)));
+    return { ok: true, config: normalizeAutoReplyConfig(saved) };
+  } catch (error) {
+    if (!isConflict(error)) throw error;
+    const fresh = normalizeAutoReplyConfig(await load());
+    return { ok: false, conflict: true, config: fresh, error };
+  }
+}
+
+export type AutoReplyPolicyDraft = Omit<AutoReplyPolicy, "globalMemory">;
+
+export type AutoReplyFormData = {
+  scopeMode: AutoReplyScopeMode;
+  globalPerHour: number;
+  chats: AutoReplyChat[];
+  excludedChats: string[];
+  policy: AutoReplyPolicyDraft;
+};
+
+export function policyDraftFrom(policy?: AutoReplyPolicy): AutoReplyPolicyDraft {
+  const source = policy ?? DEFAULT_AUTO_REPLY_POLICY;
+  return {
+    privateTrigger: source.privateTrigger,
+    groupTrigger: source.groupTrigger,
+    keywords: [...source.keywords],
+    instructions: source.instructions,
+    cooldownSeconds: source.cooldownSeconds,
+    perSenderPerHour: source.perSenderPerHour,
+    perChatPerHour: source.perChatPerHour,
+  };
+}
+
+export function autoReplyFormDataFrom(config: AutoReplyConfig): AutoReplyFormData {
+  return {
+    scopeMode: config.scopeMode ?? "only",
+    globalPerHour: config.globalPerHour,
+    chats: config.chats,
+    excludedChats: config.excludedChats ?? [],
+    policy: policyDraftFrom(config.policy),
+  };
+}
+
+/**
+ * Reconciles the local form draft when the saved baseline changes:
+ * - After a 409 CONFLICT on a full-form save (`conflictReload: true`), replaces
+ *   the draft with the newly reloaded baseline so the operator sees the server
+ *   document that caused the conflict.
+ * - After a full-form save completes, compares each draft field against the
+ *   submitted snapshot (`submittedDraft`) so any edit made while the request
+ *   was in flight is preserved and untouched fields adopt the server's baseline.
+ * - After an immediate toggle reloads a newer baseline while the form has
+ *   unsaved edits, compares each draft field against `previousBaseline`.
+ */
+export function reconcileAutoReplyDraft({
+  draft,
+  previousBaseline,
+  nextBaseline,
+  submittedDraft = null,
+  conflictReload = false,
+}: {
+  draft: AutoReplyFormData;
+  previousBaseline: AutoReplyFormData;
+  nextBaseline: AutoReplyFormData;
+  submittedDraft?: AutoReplyFormData | null;
+  conflictReload?: boolean;
+}): AutoReplyFormData {
+  if (conflictReload) return nextBaseline;
+  const ref = submittedDraft ?? previousBaseline;
+  const editedScope = draft.scopeMode !== ref.scopeMode;
+  const editedLimit = draft.globalPerHour !== ref.globalPerHour;
+  const editedChats = JSON.stringify(draft.chats) !== JSON.stringify(ref.chats);
+  const editedExcluded = JSON.stringify(draft.excludedChats) !== JSON.stringify(ref.excludedChats);
+  const editedPolicy = JSON.stringify(draft.policy) !== JSON.stringify(ref.policy);
+  return {
+    scopeMode: editedScope ? draft.scopeMode : nextBaseline.scopeMode,
+    globalPerHour: editedLimit ? draft.globalPerHour : nextBaseline.globalPerHour,
+    chats: editedChats ? draft.chats : nextBaseline.chats,
+    excludedChats: editedExcluded ? draft.excludedChats : nextBaseline.excludedChats,
+    policy: editedPolicy ? draft.policy : nextBaseline.policy,
+  };
+}
+
 const SAMPLE_PLACEHOLDER_VALUES: Readonly<Record<string, string>> = Object.freeze({
-  name: "Levix",
+  action: "delete",
+  actionText: "Deleted",
+  add: "added",
+  admin: "Alex",
+  allowed: "allowed",
+  amount: "50",
+  atLimit: "5",
+  baileysVersion: "7.0.0",
+  blocked: "blocked",
+  brand: "Levix",
+  brandName: "Levix",
+  char: "!",
+  chat: "Family",
+  chatCount: "3",
+  city: "Cairo",
+  code: "ABC123",
+  command: "!help",
+  content: "Sample message",
   count: "3",
-  quotedText: "Hello!",
-  user: "Alex",
-  sender: "Alex",
-  member: "Alex",
-  winner: "Alex",
-  who: "Alex",
+  create: "created",
+  creditor: "Alex",
+  cron: "0 9 * * *",
+  current: "3",
+  currentVersion: "2.0.1",
+  date: "2026-11-20",
+  day: "Monday",
+  days: "3",
+  debtor: "Sam",
+  deletedCount: "4",
+  description: "Sample description",
+  detail: "Detail",
+  details: "Details",
+  dir: "/home/levix/data",
+  domainToAllow: "example.com",
+  domainToDisallow: "spam.example",
+  emoji: "👍",
+  entries: "5",
+  errorMessage: "Something failed",
+  errorName: "Error",
+  expression: "2 + 2",
+  failed: "1",
+  feature: "Auto Reply",
+  featureName: "Auto Reply",
+  feelsLike: "31°C",
+  ffmpegLine: "ffmpeg -i input.mp4",
+  field: "name",
+  fields: "2",
+  fileName: "photo.jpg",
+  globalCount: "12",
+  globalJobs: "2",
+  got: "3",
   group: "Family",
-  n: "5",
-  total: "5",
+  hint: "Type !help",
+  hintBlock: "Type !help for the list",
+  hours: "2",
+  humidity: "40%",
+  i: "1",
+  id: "12",
+  ids: "12, 13",
+  introPrice: "$1.99",
+  items: "5",
+  keyword: "urgent",
+  keywordCount: "2",
+  keywords: "urgent, help",
+  kind: "photo",
+  label: "Label",
+  last: "5",
+  latestVersion: "5.0.1",
+  lead: "Alex",
   limit: "5",
+  limitAction: "delete",
+  limitFrames: "60",
+  limitMb: "16",
+  linkAction: "delete",
+  linkMode: "on",
+  list: "1, 2, 3",
+  match: "contains",
   max: "10",
+  maxDice: "6",
+  maxItems: "10",
+  maxSides: "20",
+  maxSplit: "5",
+  maxWarnings: "3",
+  mediaAction: "warn",
+  member: "Alex",
+  memoryMb: "256",
+  mentionTag: "@Alex",
+  message: "Sample message",
+  messageCount: "5",
   min: "1",
+  minute: "5",
+  minutes: "5",
+  mode: "on",
+  months: "12",
+  more: "3 more",
+  n: "5",
+  name: "Levix",
+  names: "photos, videos",
+  next: "2",
+  nodeVersion: "24.22.2",
+  notify: "group",
+  number: "7",
+  option: "2",
+  osFamily: "Linux",
+  osRelease: "6.8",
+  outcome: "deleted",
+  pack: "Favorites",
   page: "1",
   pages: "3",
-  emoji: "👍",
-  prefix: "!",
-  city: "Cairo",
+  path: "/home/levix/data",
+  perChat: "30",
+  perReactor: "3",
+  perRule: "5",
+  percent: "15%",
+  period: "30 days",
   place: "Cairo",
-  time: "09:00",
-  date: "2026-11-20",
-  pack: "Favorites",
-  text: "Sample message",
-  message: "Sample message",
-  content: "Sample message",
-  transcription: "Sample voice note",
+  platform: "android",
+  prefix: "!",
+  price: "$1.99",
+  prompt: "Say hello",
+  provider: "gemini",
+  query: "weather in Cairo",
+  question: "Which one?",
+  quotedText: "Hello!",
+  raw: "raw text",
+  reason: "Contains a forbidden word",
+  ref: "ABC123",
+  renewalMonth: "December",
+  requested: "3",
+  rest: "2 more",
+  role: "admin",
+  rule: "Auto delete",
+  rules: "2",
+  scope: "all",
+  seconds: "30",
+  sections: "3",
+  sender: "Alex",
+  shown: "5",
+  size: "12.3 MB",
+  skipped: "1",
+  spam: "2",
+  spamAction: "warn",
+  state: "on",
+  status: "connected",
+  sticker: "Favorites 1",
   summary: "Chat summary",
+  symbol: "+",
+  tag: "urgent",
+  target: "Alex",
+  task: "Send the report",
+  temp: "28°C",
+  text: "Sample message",
+  time: "09:00",
+  timeWindow: "30 minutes",
+  title: "Title",
+  total: "5",
+  transcription: "Sample voice note",
+  transitions: "add, remove",
+  typeToBlock: "block",
+  typeToUnblock: "unblock",
+  types: "photo, video",
+  unchanged: "3",
+  uptime: "2 days",
   url: "https://example.com",
+  used: "3",
+  user: "Alex",
+  value: "5",
+  version: "5.0.1",
+  warningDate: "2026-11-20",
+  when: "09:00",
+  who: "Alex",
+  wind: "12 km/h",
+  windowSec: "30",
+  windowSeconds: "30",
+  winner: "Alex",
+  word: "urgent",
 });
 
+/** `currentVersion` becomes "Current version": words, never a `<token>`. */
+export function humanizePlaceholder(name: string): string {
+  const words = String(name || "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .toLowerCase();
+  if (!words) return "";
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+export function hasSamplePlaceholderValue(name: string): boolean {
+  return Object.hasOwn(SAMPLE_PLACEHOLDER_VALUES, name);
+}
+
+/**
+ * A readable sample for a placeholder. A list preview never shows a token, so a
+ * name without a curated sample becomes its own words ("chatCount" -> "Chat
+ * count") instead of `<chatCount>`. `tests/plus-ui-logic.test.mjs` walks every
+ * placeholder in the bot catalogs and fails on a token or an empty sample.
+ */
 export function samplePlaceholderValue(name: string): string {
-  if (Object.hasOwn(SAMPLE_PLACEHOLDER_VALUES, name)) {
+  if (hasSamplePlaceholderValue(name)) {
     return SAMPLE_PLACEHOLDER_VALUES[name];
   }
-  return `<${name}>`;
+  return humanizePlaceholder(name) || "Sample";
 }
 
 export function substitutePlaceholders(template: string): string {

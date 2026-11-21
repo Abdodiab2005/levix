@@ -107,6 +107,13 @@ export type AutoReplyConfig = {
   chats: AutoReplyChat[];
   excludedChats?: string[];
   policy?: AutoReplyPolicy;
+  /**
+   * Optimistic concurrency token of the stored document. The runtime reports it
+   * on GET and PUT and refuses a save built on an older one with 409 CONFLICT.
+   * Undefined means the runtime did not report one (an older Plus build), so
+   * the save carries no revision and goes through the legacy merge rules.
+   */
+  revision?: number;
 };
 
 export const DEFAULT_AUTO_REPLY_POLICY: AutoReplyPolicy = Object.freeze({
@@ -119,6 +126,11 @@ export const DEFAULT_AUTO_REPLY_POLICY: AutoReplyPolicy = Object.freeze({
   perChatPerHour: 30,
   globalMemory: Object.freeze({ read: false }),
 });
+
+/** A revision the runtime actually reported: a non-negative safe integer. */
+export function isAutoReplyRevision(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
 
 /**
  * Preserves v1 Auto Reply fields round-trip on save and applies C-A1 defaults
@@ -158,6 +170,9 @@ export function normalizeAutoReplyConfig(
     chats: merged.chats,
     excludedChats: Array.isArray(merged.excludedChats) ? [...merged.excludedChats] : [],
     policy,
+    // Only a revision the runtime actually reported is sent back. A runtime that
+    // never reports one keeps accepting this panel's saves (legacy merge rules).
+    ...(isAutoReplyRevision(merged.revision) ? { revision: merged.revision } : {}),
   };
 }
 

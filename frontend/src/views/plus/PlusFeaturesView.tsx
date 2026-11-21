@@ -3,19 +3,26 @@ import { Bot, EyeOff, MessageSquareHeart, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Callout, Tabs } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
-import { type PlusFeatureTab, plusHash, plusTabFromHash } from "../../utils/plusAccess";
+import { usePlusStatus } from "../../hooks/usePlusStatus";
+import {
+  type PlusFeatureTab,
+  accessFromStatus,
+  plusHash,
+  plusTabFromHash,
+} from "../../utils/plusAccess";
 import { AutoReplyTab } from "./AutoReplyTab";
 import { MessagesTab } from "./MessagesTab";
 import { PresetsTab } from "./PresetsTab";
-import { readPlusStatus } from "./plusApi";
 import { VisibilityTab } from "./VisibilityTab";
 
 /**
- * Proves the extension is still active before showing anything. Local state
- * never decides it: a 409 from any ext route re-reads /plus/status.
+ * Proves Plus access is active through the shared server status store before
+ * showing any feature tab. Local state never decides it: a 409 denial from any
+ * ext route refreshes `usePlusStatus`.
  */
 export function PlusFeaturesView() {
   const { t } = useI18n();
+  const { status, available, refresh } = usePlusStatus();
   // #plus/<tab> (from an in-context Plus row) picks the starting tab.
   const [tab, setTab] = useState<PlusFeatureTab>(
     () => plusTabFromHash(window.location.hash) ?? "messages",
@@ -29,20 +36,12 @@ export function PlusFeaturesView() {
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
-  const [inactive, setInactive] = useState(false);
 
   const handleInactive = useCallback(() => {
-    void (async () => {
-      try {
-        const status = await readPlusStatus();
-        if (status.extension.state !== "active") setInactive(true);
-      } catch {
-        setInactive(true);
-      }
-    })();
-  }, []);
+    void refresh().catch(() => {});
+  }, [refresh]);
 
-  if (inactive)
+  if (accessFromStatus(status, available) !== "active")
     return (
       <Callout tone="warn" title={t("plusTitle")}>
         {t("plusExtErrorInactive")}

@@ -20,6 +20,7 @@ import {
 import { useI18n } from "../../context/I18nContext";
 import { ensurePlusStatus, usePlusStatus } from "../../hooks/usePlusStatus";
 import { fill } from "../../utils/fill";
+import { accessFromStatus } from "../../utils/plusAccess";
 import {
   type PlusProductResult,
   type PlusPurchaseResult,
@@ -111,7 +112,7 @@ export function PlusSettings({
   const { t, language } = useI18n();
   const android = isAndroidHost();
   // One shared reader: the sidebar and the in-context rows use the same copy.
-  const { status, refresh: readStatus, error: statusError } = usePlusStatus();
+  const { status, available, refresh: readStatus, error: statusError } = usePlusStatus();
   const [product, setProduct] = useState<PlusProductResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [productLoading, setProductLoading] = useState(false);
@@ -507,7 +508,7 @@ export function PlusSettings({
         loading={busy === "restore"}
       />
       <TermsViewerDialog isOpen={termsOpen} onClose={() => setTermsOpen(false)} />
-      {status.extension.state === "active" && <PlusFeaturesView />}
+      {accessFromStatus(status, available) === "active" && <PlusFeaturesView />}
     </div>
   );
 }

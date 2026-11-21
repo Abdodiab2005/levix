@@ -1808,5 +1808,7 @@
   "plusPresetProfessionalName": "Professional",
   "plusPresetProfessionalDesc": "Polite, clear replies for work and formal chats.",
   "plusPresetFunName": "Fun",
-  "plusPresetFunDesc": "Warm, lively replies with a friendly tone."
+  "plusPresetFunDesc": "Warm, lively replies with a friendly tone.",
+  "plusExtErrorConflict": "Auto Reply settings changed in another tab or device. The latest settings were loaded.",
+  "plusAutoReplyApply": "Apply"
 }
