@@ -305,7 +305,9 @@ function collectSentFileIds(sent) {
 function namesFileResource(text) {
   const lower = String(text || "").toLowerCase();
   if (!/\bfiles?\b|file_?uri|filedata|\/files\//.test(lower)) return false;
-  return /not found|not exist|expired|not in an active|not active|permission to access|forbidden|permission_denied|failed_precondition|no longer|invalid/.test(
+  // "invalid" is not expiry. "Invalid file format" names a file and still
+  // must not discard stored media.
+  return /not found|not_found|not exist|expired|not in an active|not active|permission to access|forbidden|permission_denied|failed_precondition|no longer|missing resource|resource not found/.test(
     lower,
   );
 }

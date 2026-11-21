@@ -668,4 +668,61 @@ store.deleteBotSetting("restore:applied");
 rmSync(join(data, "restore", "pending.next"), { recursive: true, force: true });
 rmSync(failedStage, { recursive: true });
 
+section("a restore that changes gemini_model strips thought signatures inside its transaction");
+settings.set("gemini_model", "gemini-3.7-flash");
+settings.set("gemini_model", "gemini-3.1-pro-preview");
+const signedArchive = await createBackup({ password, kdf });
+settings.set("gemini_model", "gemini-3.7-flash");
+const restoreSig = "restore-txn-sig-ABC";
+const signedChat = "restore-thought-sig@s.whatsapp.net";
+const signedHistory = JSON.stringify([
+  { role: "user", parts: [{ text: "earlier question" }] },
+  {
+    role: "model",
+    parts: [{ functionCall: { name: "get_datetime", args: {} }, thoughtSignature: restoreSig }],
+  },
+  {
+    role: "user",
+    parts: [
+      {
+        functionResponse: {
+          name: "get_datetime",
+          response: { iso: "2026-11-21T00:00:00.000Z" },
+        },
+      },
+    ],
+  },
+  { role: "model", parts: [{ text: "earlier answer" }] },
+]);
+db.prepare(
+  "INSERT OR REPLACE INTO ai_history (chat_id, history, updated_at) VALUES (?, ?, ?)",
+).run(signedChat, signedHistory, Date.now());
+ok(
+  "the signed row is stored before restore",
+  db
+    .prepare("SELECT history FROM ai_history WHERE chat_id = ?")
+    .get(signedChat)
+    .history.includes(restoreSig),
+);
+const signedId = upload(signedArchive.path);
+await restore.restoreUpload(signedId, password, undefined, CONFIRM);
+equal(
+  "restored model is the backup model",
+  settings.get("gemini_model"),
+  "gemini-3.1-pro-preview",
+);
+const restoredHistory = db
+  .prepare("SELECT history FROM ai_history WHERE chat_id = ?")
+  .get(signedChat).history;
+ok(
+  "the in-transaction sweep dropped the signature",
+  !restoredHistory.includes(restoreSig) && !restoredHistory.includes("thoughtSignature"),
+);
+ok("the in-transaction sweep kept the function call", restoredHistory.includes("functionCall"));
+ok("the in-transaction sweep kept the function response", restoredHistory.includes("functionResponse"));
+ok(
+  "the in-transaction sweep kept the text",
+  restoredHistory.includes("earlier answer") && restoredHistory.includes("earlier question"),
+);
+
 finish();

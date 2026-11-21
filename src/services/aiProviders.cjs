@@ -577,6 +577,19 @@ function parseAnthropicResponse(payload) {
 // the wire
 // ===========================================================================
 
+function providerFailureText(value) {
+  if (typeof value === "string" && value) return value;
+  if (value && typeof value === "object") {
+    if (typeof value.message === "string" && value.message) return value.message;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "unknown error";
+    }
+  }
+  return value == null || value === "" ? "unknown error" : String(value);
+}
+
 async function callApi({ url, headers, body, label, signal: turnSignal }) {
   const controller = new AbortController();
   const timeoutError = new Error(`${label} API request timed out after ${API_TIMEOUT_MS / 1000}s`);
@@ -602,20 +615,28 @@ async function callApi({ url, headers, body, label, signal: turnSignal }) {
     }
     signal.throwIfAborted();
     if (!response.ok) {
-      const message =
-        payload?.error?.message || payload?.error || response.statusText || "unknown error";
-      const error = new Error(
-        settings.redactSecrets(`${label} API request failed (${response.status}): ${message}`),
+      // The status stays on the error for classification. The upstream body
+      // stays in details for that same classifier and the local log. It is
+      // not part of Error.message, so a short provider string cannot be
+      // handed to the model as the tool failure text.
+      const upstream = providerFailureText(
+        payload?.error?.message || payload?.error || response.statusText || "unknown error",
       );
+      const error = new Error(`${label} API request failed (${response.status})`);
       error.status = response.status;
+      error.details = settings.redactSecrets(upstream);
+      error.providerFailure = true;
       throw error;
     }
     return payload;
   } catch (err) {
     if (controller.signal.aborted) throw timeoutError;
     if (turnSignal?.aborted) throw turnSignal.reason;
-    if (err?.status) throw err;
-    throw new Error(settings.redactSecrets(`${label} API request failed: ${err?.message || err}`));
+    if (err?.providerFailure || err?.status) throw err;
+    const wrapped = new Error(`${label} API request failed`);
+    wrapped.details = settings.redactSecrets(String(err?.message || err));
+    wrapped.providerFailure = true;
+    throw wrapped;
   } finally {
     clearTimeout(timer);
   }

@@ -1718,27 +1718,62 @@ function saveChatHistory(chatId, historyArray) {
   ).run(chatId, JSON.stringify(turns), Date.now());
 }
 
+/** Drop thought signatures and thought parts from one history value. Calls stay. */
+function stripThoughtSignaturesFromHistory(historyArray) {
+  return stripThoughtTurns(historyTurnsFromInput(historyArray));
+}
+
+function rewriteStoredThoughtSignatures() {
+  const rows = q("SELECT chat_id, history FROM ai_history").all();
+  let updated = 0;
+  for (const row of rows) {
+    let raw;
+    try {
+      raw = JSON.parse(row.history);
+    } catch {
+      continue;
+    }
+    const next = stripThoughtTurns(historyTurnsFromStored(raw));
+    const serialized = JSON.stringify(next);
+    if (serialized === row.history) continue;
+    q("UPDATE ai_history SET history = ? WHERE chat_id = ?").run(serialized, row.chat_id);
+    updated += 1;
+  }
+  return updated;
+}
+
 // One transaction for every stored chat. Called when gemini_model,
 // gemini_base_url or gemini_api_key changes — not on each message.
+// Joins a transaction that is already open (backup restore) instead of
+// issuing a nested BEGIN IMMEDIATE. A failure is logged and rethrown.
 function stripGeminiThoughtSignatures() {
-  return withImmediateTransaction(() => {
-    const rows = q("SELECT chat_id, history FROM ai_history").all();
-    let updated = 0;
-    for (const row of rows) {
-      let raw;
-      try {
-        raw = JSON.parse(row.history);
-      } catch {
-        continue;
-      }
-      const next = stripThoughtTurns(historyTurnsFromStored(raw));
-      const serialized = JSON.stringify(next);
-      if (serialized === row.history) continue;
-      q("UPDATE ai_history SET history = ? WHERE chat_id = ?").run(serialized, row.chat_id);
-      updated += 1;
-    }
+  // node:sqlite reports whether a transaction is open on this connection.
+  const nested = db.isTransaction === true;
+  const savepoint = "levix_strip_thoughts";
+  try {
+    db.exec(nested ? `SAVEPOINT ${savepoint}` : "BEGIN IMMEDIATE");
+  } catch (error) {
+    logger.error({ err: error }, "[ai_history] thought-signature sweep could not start");
+    throw error;
+  }
+  try {
+    const updated = rewriteStoredThoughtSignatures();
+    db.exec(nested ? `RELEASE ${savepoint}` : "COMMIT");
     return updated;
-  });
+  } catch (error) {
+    try {
+      if (nested) {
+        db.exec(`ROLLBACK TO ${savepoint}`);
+        db.exec(`RELEASE ${savepoint}`);
+      } else {
+        db.exec("ROLLBACK");
+      }
+    } catch (rollbackError) {
+      logger.error({ err: rollbackError }, "[ai_history] thought-signature sweep rollback failed");
+    }
+    logger.error({ err: error }, "[ai_history] thought-signature sweep failed");
+    throw error;
+  }
 }
 
 function deleteChatHistory(chatId) {
@@ -2764,6 +2799,7 @@ module.exports = {
   getChatHistoryWithMeta,
   listChatHistories,
   saveChatHistory,
+  stripThoughtSignaturesFromHistory,
   stripGeminiThoughtSignatures,
   deleteChatHistory,
   deleteAllChatHistories,
