@@ -556,11 +556,37 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
     error.code = code;
     return error;
   }
+  function rowMatches(row, aliases, jid) {
+    const rowIds = participantIds(row).map(canonicalJid).filter(Boolean);
+    if (jid.endsWith("@lid")) {
+      const rowLids = rowIds.filter((id) => id.endsWith("@lid"));
+      if (rowLids.length && !rowLids.includes(jid)) return false;
+    } else if (jid.endsWith("@s.whatsapp.net")) {
+      const rowPns = rowIds.filter((id) => id.endsWith("@s.whatsapp.net"));
+      if (rowPns.length && !rowPns.includes(jid)) return false;
+    }
+    return rowIds.some((id) => aliases.includes(id));
+  }
+  function participantRow(meta, value) {
+    const aliases = verifiedIdentityAliases(value);
+    if (!aliases.length) return null;
+    const jid = aliases[0];
+    return (
+      meta?.participants?.find((p) => participantIds(p).some((id) => canonicalJid(id) === jid)) ||
+      meta?.participants?.find((p) => rowMatches(p, aliases, jid)) ||
+      null
+    );
+  }
   function destructiveGuard(job, canonical, api, invocation) {
     return ({ meta, kickJid, candidates }) => {
+      const targetRow = participantRow(meta, kickJid);
+      if (!targetRow) throw coded("REACTION_STALE");
       const ids = [canonical, kickJid, ...(candidates || [])].filter(Boolean);
-      const targetRows = ids.map((id) => verifiedParticipant(meta, id)).filter(Boolean);
-      if (!targetRows.length) throw coded("REACTION_STALE");
+      for (const id of ids) {
+        const row = participantRow(meta, id);
+        if (row && row !== targetRow) throw coded("REACTION_STALE");
+      }
+      if (participantRow(meta, canonical) !== targetRow) throw coded("REACTION_STALE");
       job.metadata = meta;
       try {
         available(job);
@@ -621,11 +647,9 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
       // this turn. A later participants update that only removes this target
       // is the effect of that call and must not abort the receipt.
       if (invocation.command?.name === "kick") {
-        const removalIds = [...ids];
-        for (const row of targetRows) {
-          for (const alias of participantIds(row)) {
-            if (!removalIds.includes(alias)) removalIds.push(alias);
-          }
+        const removalIds = [kickJid];
+        for (const alias of participantIds(targetRow)) {
+          if (!removalIds.includes(alias)) removalIds.push(alias);
         }
         job.removal = { ids: removalIds };
       }
