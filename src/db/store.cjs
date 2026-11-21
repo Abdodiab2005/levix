@@ -1789,7 +1789,9 @@ function stripGeminiThoughtSignatures() {
   try {
     const updated = rewriteStoredThoughtSignatures();
     db.exec(nested ? `RELEASE ${savepoint}` : "COMMIT");
-    geminiSignatureSweepPending = false;
+    if (!nested) {
+      geminiSignatureSweepPending = false;
+    }
     return updated;
   } catch (error) {
     geminiSignatureSweepPending = true;

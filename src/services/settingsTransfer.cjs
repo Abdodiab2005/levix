@@ -260,7 +260,6 @@ settings.onChange((key) => {
   store.bumpGeminiSignatureGeneration();
   try {
     store.stripGeminiThoughtSignatures();
-    store.clearGeminiSignatureSweepPending();
   } catch (error) {
     store.markGeminiSignatureSweepPending();
     logger.error({ err: error, key }, "[ai_history] thought-signature sweep failed");

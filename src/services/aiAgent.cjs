@@ -737,8 +737,10 @@ async function runAgent(options = {}) {
     pinnedProvider !== undefined && pinnedProvider !== null
       ? getProvider(pinnedProvider)
       : getProvider();
+  const stripSignatures = Boolean(options.stripSignatures) || store.isGeminiSignatureSweepPending();
   const result = await provider.runTurn({
     ...options,
+    stripSignatures,
     history: trimHistory(options.history),
     systemInstruction: buildSystemInstruction(options.context),
   });
@@ -759,11 +761,13 @@ async function runGeminiTurn({
   search = null,
   signal,
   geminiPin = null,
+  stripSignatures = false,
 } = {}) {
   // Before the endpoint check. A settings change during that await must not
   // move this turn onto another model, endpoint or key. A pin from the command
   // covers the file-recovery retry, which is a second call.
   const pin = geminiPin || readGeminiProviderPin();
+  const stripOnCall = Boolean(stripSignatures) || store.isGeminiSignatureSweepPending();
   const genAI = geminiClient(pin);
   if (!genAI) throw new Error(t("bot.ai.aiAgent.noGeminiKey"));
   await assertProviderRequestUrl(pin.baseUrl, { allowLoopback: true });
@@ -774,20 +778,23 @@ async function runGeminiTurn({
   // Signatures are stripped when gemini_model, gemini_base_url or gemini_api_key
   // changes. When that sweep threw after the setting write, retry it before the
   // first request; if it fails again, strip the loaded history in memory and
-  // leave the pending flag set. A leftover 400 (a gateway alias, a restored
-  // backup) is retried once below; a provider switch does not drop function
-  // calls on its own.
-  let inputHistory = history;
+  // leave the pending flag set. A turn whose history snapshot was loaded while
+  // a sweep was pending also strips its copy in memory even if another turn
+  // cleared the flag first. A leftover 400 (a gateway alias, a restored backup)
+  // is retried once below; a provider switch does not drop function calls on
+  // its own.
+  const shouldStripHistory = stripOnCall || store.isGeminiSignatureSweepPending();
   if (store.isGeminiSignatureSweepPending()) {
     try {
       store.stripGeminiThoughtSignatures();
-      store.clearGeminiSignatureSweepPending();
     } catch (error) {
       store.markGeminiSignatureSweepPending();
       logger.error({ err: error }, "[ai_history] thought-signature sweep retry failed");
     }
-    inputHistory = store.stripThoughtSignaturesFromHistory(inputHistory);
   }
+  const inputHistory = shouldStripHistory
+    ? store.stripThoughtSignaturesFromHistory(history)
+    : history;
   let activeHistory = trimHistory(inputHistory);
 
   // `ai.chats` rather than a hand-rolled contents array on purpose. Gemini 3
