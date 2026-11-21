@@ -1471,21 +1471,40 @@ function getUserMetadataExact(identifier) {
   const raw = String(identifier).trim();
   if (!raw) return null;
 
+  function acceptUserLidRow(row, lid) {
+    if (!row) return null;
+    const targetLid = roleJid(lid || row.user_lid);
+    const rowPn =
+      (row.user_jid && !row.user_jid.endsWith("@lid") && !row.user_jid.endsWith("@g.us")
+        ? roleJid(row.user_jid)
+        : null) || (row.phone_number ? asPnJid(row.phone_number) : null);
+    if (!rowPn) return row;
+    if (targetLid) {
+      const current = currentRoleMapping(rowPn);
+      if (current && roleJid(current.lid) === targetLid) return row;
+    }
+    return null;
+  }
+
   let row = userRow(raw);
   if (row) return rowToUser(row);
 
-  row = q("SELECT * FROM user_metadata WHERE user_lid = ?").get(raw);
+  row = acceptUserLidRow(q("SELECT * FROM user_metadata WHERE user_lid = ?").get(raw), raw);
   if (row) return rowToUser(row);
 
   const norm = roleJid(raw);
   if (norm && norm !== raw) {
-    row = userRow(norm) || q("SELECT * FROM user_metadata WHERE user_lid = ?").get(norm);
+    row =
+      userRow(norm) ||
+      acceptUserLidRow(q("SELECT * FROM user_metadata WHERE user_lid = ?").get(norm), norm);
     if (row) return rowToUser(row);
   }
 
   for (const alias of roleIdentityAliases(raw)) {
     if (alias === raw) continue;
-    row = userRow(alias) || q("SELECT * FROM user_metadata WHERE user_lid = ?").get(alias);
+    row =
+      userRow(alias) ||
+      acceptUserLidRow(q("SELECT * FROM user_metadata WHERE user_lid = ?").get(alias), alias);
     if (row) return rowToUser(row);
   }
 
@@ -2025,11 +2044,21 @@ function resolveUserPhone(jid) {
   const local = raw.split("@")[0].split(":")[0];
 
   if (isLid) {
-    for (const candidate of [raw, local, `${local}@lid`]) {
+    const normLid = roleJid(raw);
+    for (const candidate of [raw, normLid, `${local}@lid`].filter(Boolean)) {
       const pn = getPnForLid(candidate);
-      if (!pn) continue;
-      const digits = String(pn).split("@")[0].replace(/\D/g, "");
-      if (digits && /^\d{8,15}$/.test(digits)) return digits;
+      if (pn) {
+        const pnJid = roleJid(pn);
+        if (pnJid?.endsWith("@s.whatsapp.net")) {
+          const current = currentRoleMapping(pnJid);
+          const currentLid = current && roleJid(current.lid);
+          const targetLid = roleJid(candidate);
+          if (currentLid && targetLid && currentLid === targetLid) {
+            const digits = pnJid.split("@")[0].replace(/\D/g, "");
+            if (digits && /^\d{8,15}$/.test(digits)) return digits;
+          }
+        }
+      }
     }
     return null;
   }

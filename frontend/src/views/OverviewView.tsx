@@ -10,16 +10,27 @@ import {
   Clock,
   HardDrive,
   Radio,
+  RefreshCw,
   SmilePlus,
   Terminal,
   Users,
 } from "lucide-react";
 import type { FC } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import type { ViewTab } from "../components/Sidebar";
 import { useToast } from "../components/Toasts";
-import { Button, Card, CodeText, ListRow, Section, StatTile, UserText } from "../components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CodeText,
+  IconButton,
+  ListRow,
+  Section,
+  StatTile,
+  UserText,
+} from "../components/ui";
 import { useI18n } from "../context/I18nContext";
 import { usePlusStatus } from "../hooks/usePlusStatus";
 import type {
@@ -34,6 +45,8 @@ import { ConnectedAccountCard } from "./ConnectedAccountCard";
 import {
   buildAttentionItems,
   buildQuickActions,
+  countActiveSchedules,
+  countOpenTodos,
   type OverviewQuickAction,
   selectOpenTodos,
   selectUpcomingSchedules,
@@ -63,7 +76,10 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
   const [schedules, setSchedules] = useState<ScheduleItem[] | null>(null);
   const [reactions, setReactions] = useState<ReactionOverview | null>(null);
   const [todos, setTodos] = useState<TodoRowLike[] | null>(null);
+  const [totalActiveSchedules, setTotalActiveSchedules] = useState<number | null>(null);
+  const [totalOpenTodos, setTotalOpenTodos] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [starting, setStarting] = useState(false);
 
   const isStartable = Boolean(
@@ -101,18 +117,19 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
   };
 
   // Fetch summaries once on mount and on explicit refresh.
-  // Never refetch the entire dataset on session state transitions.
-  useEffect(() => {
-    let mounted = true;
-    Promise.allSettled([
-      api.getStats(),
-      api.getSettings(),
-      api.getSchedules(),
-      api.getReactions(),
-      api.get<{ todos?: TodoRowLike[] }>("/todos"),
-    ])
-      .then(([statsRes, settingsRes, schedulesRes, reactionsRes, todosRes]) => {
-        if (!mounted) return;
+  const loadSummaries = useCallback(
+    async (isRefresh = false) => {
+      if (isRefresh) setRefreshing(true);
+      try {
+        const [statsRes, settingsRes, schedulesRes, reactionsRes, todosRes] =
+          await Promise.allSettled([
+            api.getStats(),
+            api.getSettings(),
+            api.getSchedules(),
+            api.getReactions(),
+            api.get<{ todos?: TodoRowLike[] }>("/todos"),
+          ]);
+
         if (statsRes.status === "fulfilled" && statsRes.value?.stats) {
           setStats(statsRes.value.stats);
         } else if (statsRes.status === "rejected") {
@@ -123,6 +140,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
         }
         if (schedulesRes.status === "fulfilled" && Array.isArray(schedulesRes.value?.schedules)) {
           const allSchedules = schedulesRes.value.schedules;
+          setTotalActiveSchedules(countActiveSchedules(allSchedules));
           const upcoming = selectUpcomingSchedules(allSchedules, 3);
           const failed = allSchedules.filter(
             (s) => s.lastDeliveryStatus === "failed" || Boolean(s.lastError),
@@ -137,16 +155,35 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
           setReactions(reactionsRes.value);
         }
         if (todosRes.status === "fulfilled" && Array.isArray(todosRes.value?.todos)) {
-          setTodos(todosRes.value.todos.slice(0, 10));
+          const allTodos = todosRes.value.todos;
+          setTotalOpenTodos(countOpenTodos(allTodos));
+          setTodos(allTodos.slice(0, 10));
         }
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [t, toast]);
+      } finally {
+        setLoading(false);
+        if (isRefresh) setRefreshing(false);
+      }
+    },
+    [t, toast],
+  );
+
+  useEffect(() => {
+    void loadSummaries(false);
+  }, [loadSummaries]);
+
+  // Refetch summaries when the session becomes connected after not being connected (a reconnect),
+  // not on every session state transition.
+  const isConnected = Boolean(status?.connected || status?.state === "connected");
+  const prevConnectedRef = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    if (prevConnectedRef.current !== null) {
+      if (!prevConnectedRef.current && isConnected) {
+        void loadSummaries(false);
+      }
+    }
+    prevConnectedRef.current = isConnected;
+  }, [isConnected, loadSummaries]);
 
   const formatUptime = (seconds: number) => {
     const days = Math.floor(seconds / 86400);
@@ -158,11 +195,14 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
   };
 
   const activeSchedulesCount = useMemo(() => {
+    if (typeof totalActiveSchedules === "number") {
+      return totalActiveSchedules;
+    }
     if (Array.isArray(schedules)) {
       return schedules.filter((item) => item.status === "active").length;
     }
     return stats?.activeSchedules ?? 0;
-  }, [schedules, stats?.activeSchedules]);
+  }, [totalActiveSchedules, schedules, stats?.activeSchedules]);
 
   const attentionItems = useMemo(
     () =>
@@ -200,6 +240,15 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
         onStart={canQuickStart ? handleStart : undefined}
         starting={starting}
       />
+
+      <div className="flex items-center justify-end">
+        <IconButton
+          label={t("overviewRefresh")}
+          icon={<RefreshCw size={16} className={refreshing ? "animate-spin" : undefined} />}
+          onClick={() => void loadSummaries(true)}
+          disabled={loading || refreshing}
+        />
+      </div>
 
       {/* 2. Key stats as StatTile in a 2-column mobile grid */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" data-tour="overview-stats">
@@ -283,9 +332,14 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {upcomingSchedules.length > 0 && (
               <Card className="flex flex-col gap-2.5">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-faint">
-                  {t("overviewUpcomingSchedulesHeading")}
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-faint">
+                    {t("overviewUpcomingSchedulesHeading")}
+                  </h3>
+                  {typeof totalActiveSchedules === "number" && totalActiveSchedules > 0 && (
+                    <Badge tone="neutral">{totalActiveSchedules}</Badge>
+                  )}
+                </div>
                 <div className="flex flex-col gap-2">
                   {upcomingSchedules.map((item) => {
                     const whenText = item.whenByLocale?.[language] || item.when;
@@ -325,9 +379,14 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
 
             {openTodos.length > 0 && (
               <Card className="flex flex-col gap-2.5">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-faint">
-                  {t("overviewOpenTodosHeading")}
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-faint">
+                    {t("overviewOpenTodosHeading")}
+                  </h3>
+                  {typeof totalOpenTodos === "number" && totalOpenTodos > 0 && (
+                    <Badge tone="neutral">{totalOpenTodos}</Badge>
+                  )}
+                </div>
                 <div className="flex flex-col gap-2">
                   {openTodos.map((todo) => (
                     <ListRow

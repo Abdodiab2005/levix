@@ -1908,6 +1908,7 @@ const en = {
   plusPresetFunDesc: "Warm, lively replies with a friendly tone.",
   plusExtErrorConflict: "Auto Reply settings changed in another tab or device. The latest settings were loaded.",
   plusAutoReplyApply: "Apply",
+  overviewRefresh: "Refresh overview",
 };
 
 export type MessageKey = keyof typeof en;
@@ -3824,6 +3825,7 @@ export const translations: {
     plusPresetFunDesc: "ردود ودودة وحيوية بأسلوب لطيف.",
     plusExtErrorConflict: "تغيرت إعدادات الرد التلقائي في علامة تبويب أخرى أو جهاز آخر. تم تحميل أحدث الإعدادات.",
     plusAutoReplyApply: "تطبيق",
+    overviewRefresh: "تحديث النظرة العامة",
   },
   en,
   "pt-BR": {
@@ -5732,6 +5734,7 @@ export const translations: {
     plusPresetFunDesc: "Respostas calorosas e animadas com um tom amigável.",
     plusExtErrorConflict: "As configurações de resposta automática mudaram em outra guia ou dispositivo. As configurações mais recentes foram carregadas.",
     plusAutoReplyApply: "Aplicar",
+    overviewRefresh: "Atualizar visão geral",
   },
   "es-419": {
     tabBackup: "Copia de seguridad y restauración",
@@ -7639,6 +7642,7 @@ export const translations: {
     plusPresetFunDesc: "Respuestas cálidas y animadas con un tono amigable.",
     plusExtErrorConflict: "La configuración de respuesta automática cambió en otra pestaña o dispositivo. Se cargó la configuración más reciente.",
     plusAutoReplyApply: "Aplicar",
+    overviewRefresh: "Actualizar resumen",
   },
 };
 

@@ -1903,5 +1903,6 @@
   "plusPresetFunName": "مرح",
   "plusPresetFunDesc": "ردود ودودة وحيوية بأسلوب لطيف.",
   "plusExtErrorConflict": "تغيرت إعدادات الرد التلقائي في علامة تبويب أخرى أو جهاز آخر. تم تحميل أحدث الإعدادات.",
-  "plusAutoReplyApply": "تطبيق"
+  "plusAutoReplyApply": "تطبيق",
+  "overviewRefresh": "تحديث النظرة العامة"
 }

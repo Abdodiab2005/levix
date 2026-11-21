@@ -46,7 +46,8 @@ function boundedText(value, max) {
 function cleanProfileName(value) {
   const text = boundedText(value, 256);
   if (!text || text === "~") return null;
-  if (/^\d+(?::\d+)?@(?:s\.whatsapp\.net|lid|g\.us)$/.test(text)) return null;
+  if (/^[^\s@]+@(?:s\.whatsapp\.net|c\.us|lid|g\.us|broadcast|newsletter)$/i.test(text))
+    return null;
   return text;
 }
 
@@ -188,8 +189,8 @@ function createAccountProfile({
       ? cleanProfileName(socket?.user?.name) ||
         cleanProfileName(socket?.user?.verifiedName) ||
         cleanProfileName(socket?.user?.notify) ||
-        resolveCredsName(raw, identity, acceptedIds, matchesIdentity) ||
-        resolveStoredDisplayName(raw, identity, acceptedIds, matchesIdentity) ||
+        cleanProfileName(resolveCredsName(raw, identity, acceptedIds, matchesIdentity)) ||
+        cleanProfileName(resolveStoredDisplayName(raw, identity, acceptedIds, matchesIdentity)) ||
         null
       : null;
 
@@ -275,7 +276,7 @@ function createAccountProfile({
     if (!snapshot?.connected) return emptyProfile(snapshot);
     return {
       connected: true,
-      name: snapshot.name ?? null,
+      name: cleanProfileName(snapshot.name) ?? null,
       phone: snapshot.phone ?? null,
       about: null,
       photoUrl: null,
@@ -288,7 +289,7 @@ function createAccountProfile({
     const hasPhoto = Boolean(entry.photoInternal);
     return {
       connected: Boolean(snapshot.connected),
-      name: snapshot.name ?? null,
+      name: cleanProfileName(snapshot.name) ?? null,
       phone: snapshot.phone ?? null,
       about: entry.about ?? null,
       photoUrl: hasPhoto

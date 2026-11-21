@@ -5,6 +5,8 @@ import { cleanAccountName } from "../frontend/src/utils/accountCardState.ts";
 import {
   buildAttentionItems,
   buildQuickActions,
+  countActiveSchedules,
+  countOpenTodos,
   isActiveProviderKeyConfigured,
   isReactionOutcomeFailure,
   selectOpenTodos,
@@ -167,16 +169,38 @@ section("Needs Attention: only real issues appear and healthy state is empty");
   equal("Plus attention hidden where Plus is not offered", noPlusPlatform.length, 0);
 
   equal(
-    "routine admission outcomes (DELIVERED, NO_MATCH, DUPLICATE, RATE_LIMIT, CAPACITY, BUSY) are not reaction failures",
+    "routine admission outcomes (DELIVERED, NO_MATCH, DUPLICATE, RATE_LIMIT, CAPACITY, BUSY, REACTION_CANCELLED) are not reaction failures",
     isReactionOutcomeFailure("DELIVERED") ||
       isReactionOutcomeFailure("NO_MATCH") ||
       isReactionOutcomeFailure("DUPLICATE") ||
       isReactionOutcomeFailure("RATE_LIMIT") ||
       isReactionOutcomeFailure("CAPACITY") ||
       isReactionOutcomeFailure("REACTION_CAPACITY") ||
-      isReactionOutcomeFailure("BUSY"),
+      isReactionOutcomeFailure("BUSY") ||
+      isReactionOutcomeFailure("REACTION_CANCELLED"),
     false,
   );
+  equal(
+    "REACTION_CANCELLED is not a failure",
+    isReactionOutcomeFailure("REACTION_CANCELLED"),
+    false,
+  );
+
+  const cancelledReaction = buildAttentionItems({
+    status: { state: "connected", connected: true, linked: true },
+    reactions: {
+      automation: { enabled: false, revision: "r1" },
+      rules: [
+        {
+          id: "r1",
+          enabled: true,
+          runtime: { lastCode: "REACTION_CANCELLED" },
+        },
+      ],
+    },
+  });
+  equal("REACTION_CANCELLED produces zero attention items", cancelledReaction.length, 0);
+
   equal(
     "ACTION_FAILED is a real reaction failure",
     isReactionOutcomeFailure("ACTION_FAILED"),
@@ -204,10 +228,37 @@ section("cleanAccountName rejects raw JID strings and invalid values");
   equal("accepts valid display name", cleanAccountName("  Levix Owner  "), "Levix Owner");
 }
 
-section("OverviewView design contract: isolated phone labels and bounded fetch");
+section("OverviewView design contract: isolated phone labels, refresh button, and reconnect fetch");
 {
   ok("overview isolates phone label in CodeText", overview.includes("<CodeText"));
   ok("overview does not re-fetch on session transitions", !overview.includes("statusRefreshKey"));
+  ok(
+    "overview has an explicit refresh IconButton with label",
+    overview.includes("<IconButton") && overview.includes('label={t("overviewRefresh")}'),
+  );
+  ok(
+    "overview refetches on reconnect (when connected after not being connected)",
+    overview.includes("!prevConnectedRef.current && isConnected"),
+  );
+}
+
+section("countActiveSchedules and countOpenTodos compute full totals before bounding");
+{
+  const fiveSchedules = [
+    { id: "1", status: "active", when: "Soon" },
+    { id: "2", status: "active", when: "Later" },
+    { id: "3", status: "active", when: "Tomorrow" },
+    { id: "4", status: "active", when: "Next week" },
+    { id: "5", status: "paused", when: "Someday" },
+  ];
+  equal("countActiveSchedules returns 4 active schedules", countActiveSchedules(fiveSchedules), 4);
+  equal("selectUpcomingSchedules bounds to 3", selectUpcomingSchedules(fiveSchedules, 3).length, 3);
+
+  const todoRows = [
+    { tasks: ["Buy milk", "Walk dog", { text: "Done task", done: true }] },
+    { tasks: ["Read book", { title: "Completed task", completed: true }, "Write code"] },
+  ];
+  equal("countOpenTodos counts 4 open tasks", countOpenTodos(todoRows), 4);
 }
 
 section("Quick Actions adapt to connection state and target operational routes");

@@ -183,9 +183,11 @@ export function setupEventListeners(
   listen(sock.ev, "messages.upsert", (m) => {
     intake("messages.upsert", (payload) => reactions.observeUpsert(payload))(m);
     contained("messages.upsert", (payload) => handleIncomingMessage(sock, payload))(m);
-    const list = Array.isArray(m?.messages) ? m.messages : [];
-    const own = list.find((msg) => msg?.key?.fromMe && cleanOwnerName(msg.pushName));
-    if (own) ownerName(cleanOwnerName(own.pushName));
+    if (m?.type === "notify") {
+      const list = Array.isArray(m?.messages) ? m.messages : [];
+      const own = list.find((msg) => msg?.key?.fromMe && cleanOwnerName(msg.pushName));
+      if (own) ownerName(cleanOwnerName(own.pushName));
+    }
   });
 
   listen(

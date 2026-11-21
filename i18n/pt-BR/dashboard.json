@@ -1903,5 +1903,6 @@
   "plusPresetFunName": "Divertido",
   "plusPresetFunDesc": "Respostas calorosas e animadas com um tom amigável.",
   "plusExtErrorConflict": "As configurações de resposta automática mudaram em outra guia ou dispositivo. As configurações mais recentes foram carregadas.",
-  "plusAutoReplyApply": "Aplicar"
+  "plusAutoReplyApply": "Aplicar",
+  "overviewRefresh": "Atualizar visão geral"
 }
