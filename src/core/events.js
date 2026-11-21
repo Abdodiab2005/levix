@@ -37,9 +37,18 @@ const {
  */
 export function setupEventListeners(
   sock,
-  { saveCreds, onConnectionUpdate, onHandshakeRejected, isLiveSocket } = {},
+  {
+    saveCreds,
+    onConnectionUpdate,
+    onHandshakeRejected,
+    isLiveSocket,
+    automation: suppliedAutomation,
+  } = {},
 ) {
-  const automation = createReactionAutomation(sock, { dispatch: executeCommandInvocation });
+  // Production creates the engine. A test may pass the engine it is driving so
+  // this listener and that engine are the same object.
+  const automation =
+    suppliedAutomation || createReactionAutomation(sock, { dispatch: executeCommandInvocation });
   const reactions = automation.intake;
   // One disposer removes exactly the callbacks this call registered. Baileys
   // also listens on creds.update and lid-mapping.update, so this must not use
@@ -208,11 +217,13 @@ export function setupEventListeners(
   // Group participant updates. Mark the roster stale in this turn, before the
   // contained handler's microtask and before any await. Every action (add,
   // remove, promote, demote, modify, leave) can change who must receive a
-  // sender key. Pending reaction actions for the group are cancelled in the
-  // same turn, because membership and roles may have changed.
+  // sender key, so pending reaction work for the group is cancelled here.
+  // cancelChat leaves a kick receipt running when this update is only the
+  // removal that kick already started. The receipt reads the live roster
+  // again before it is sent.
   listen(sock.ev, "group-participants.update", (update) => {
     markRosterChanged(sock, update?.id);
-    if (update?.id) automation.cancelChat(update.id);
+    if (update?.id) automation.cancelChat(update.id, update);
     contained(
       "group-participants.update",
       (payload) => handleGroupParticipantsUpdate(sock, payload),

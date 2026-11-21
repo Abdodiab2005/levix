@@ -284,12 +284,23 @@ function undiciBody(body) {
 }
 
 async function safeProviderFetch(raw, init = {}, options = {}) {
-  const { url, host, addresses } = await resolveProviderRequestUrl(raw, options);
+  const { prepareRequest, ...resolveOptions } = options;
+  const { url, host, addresses } = await resolveProviderRequestUrl(raw, resolveOptions);
+  // DNS has finished. prepareRequest is the last chance to read credentials
+  // and it must not await: the headers it returns are the ones that are sent.
+  let request = init;
+  if (typeof prepareRequest === "function") {
+    const prepared = prepareRequest(init);
+    if (prepared && typeof prepared.then === "function") {
+      throw new Error("Provider request preparation must be synchronous");
+    }
+    if (prepared && typeof prepared === "object") request = { ...init, ...prepared };
+  }
   const dispatcher = new Agent({ connect: { lookup: pinnedLookup(host, addresses) } });
   try {
     const response = await undiciFetch(url, {
-      ...init,
-      ...(init.body !== undefined ? { body: undiciBody(init.body) } : {}),
+      ...request,
+      ...(request.body !== undefined ? { body: undiciBody(request.body) } : {}),
       redirect: "manual",
       dispatcher,
     });

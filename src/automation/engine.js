@@ -117,6 +117,30 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
     for (const job of active)
       if (predicate(job)) job.controller.abort(new Error("REACTION_CANCELLED"));
   };
+  // rc14 sends participant objects ({ id, phoneNumber, lid }). Older sockets
+  // send the bare JID. A removal is "only the kick target" when every listed
+  // person matches an identity the kick claimed, and nobody else is included.
+  function participantIds(participant) {
+    if (typeof participant === "string") return [participant];
+    if (!participant || typeof participant !== "object") return [];
+    const ids = [];
+    for (const field of ["id", "lid", "phoneNumber", "jid", "pn"]) {
+      const value = participant[field];
+      if (typeof value === "string" && value && !ids.includes(value)) ids.push(value);
+    }
+    return ids;
+  }
+  function expectedRemoval(job, update) {
+    const removal = job.removal;
+    if (!removal?.ids?.length || !update || typeof update !== "object") return false;
+    if (update.action !== "remove" && update.action !== "leave") return false;
+    const people = Array.isArray(update.participants) ? update.participants : null;
+    if (!people?.length) return false;
+    return people.every((person) => {
+      const ids = participantIds(person);
+      return ids.length > 0 && ids.some((id) => removal.ids.some((target) => same(target, id)));
+    });
+  }
   const intake = attachReactionIntake(sock, {
     now,
     onTransition: submit,
@@ -457,12 +481,16 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
           fail("REACTION_DELIVERY_REFUSED");
       },
     };
-    // Posted only after WhatsApp has already removed the member. The requester,
-    // the rule, the account and the destination are checked again. The removed
-    // member does not have to still be in the group.
+    // Posted only after WhatsApp has already removed the member. The live
+    // roster is read again first. The linked account, the requester's rule
+    // and command permission, and the group all have to still match. The
+    // removed member does not have to still be in the group.
     const receiptGuard = {
       refresh: () => refresh(job),
       assert: () => {
+        if (accountStamp() !== job.linkedAccount) fail("REACTION_STALE");
+        const chat = job.event.original.key.remoteJid;
+        if (!job.metadata || canonicalJid(job.metadata.id) !== chat) fail("REACTION_INACCESSIBLE");
         authorizeReceipt(job);
         const gate = api.evaluateCommandGates(
           sock,
@@ -588,10 +616,15 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
         now(),
       );
       if (verdict !== "CLAIMED") throw coded(verdict);
+      // The remove call is the next statement in kickGroupMember, still in
+      // this turn. A later participants update that only removes this target
+      // is the effect of that call and must not abort the receipt.
+      if (invocation.command?.name === "kick") job.removal = { ids };
     };
   }
   async function execute(job) {
     job.accountEpoch = store.accountEpoch();
+    job.linkedAccount = accountStamp();
     await refresh(job);
     const subject = sender(job);
     const event = job.event;
@@ -717,8 +750,10 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
   return {
     intake,
     close,
-    cancelChat(chat) {
-      cancel((job) => same(job.event.original.key.remoteJid, chat));
+    cancelChat(chat, update) {
+      cancel(
+        (job) => same(job.event.original.key.remoteJid, chat) && !expectedRemoval(job, update),
+      );
     },
     stats() {
       return { active: active.size, completed, lastCode };

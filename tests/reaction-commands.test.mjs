@@ -1103,6 +1103,174 @@ try {
     equal("a second admin posts no announcement", announcements(), 1);
   }
 
+  section("a kick receipt follows the removal notification and still rechecks");
+  {
+    const { setupEventListeners } = await import("../src/core/events.js");
+    const wire = (f) =>
+      setupEventListeners(f.socket, {
+        automation: f.engine,
+        saveCreds() {},
+        onConnectionUpdate() {},
+      });
+    const announcements = (f) =>
+      f.state.sent.filter((row) => String(row.content?.text || "").includes("*Action:* kick"))
+        .length;
+    const kickRule = {
+      rules: [{ id: "kick", definition: commandDefinition("group:kick", { emoji: "🫰" }) }],
+    };
+
+    {
+      const f = await fixture(kickRule);
+      markAdmins(f);
+      const dispose = wire(f);
+      f.state.onMetadata = () => {
+        if (f.state.metadataCalls < 2) return;
+        f.socket.ev.emit("group-participants.update", {
+          id: group,
+          action: "demote",
+          participants: [{ id: reactor }],
+        });
+      };
+      try {
+        receive(f, remember(f), "🫰");
+        // The demotion either aborts the job or fails the final permission
+        // gate, depending on which roster read sees it first. Both refuse.
+        const code = await completed(f);
+        ok(
+          "demotion before the removal refuses the kick",
+          code === "REACTION_CANCELLED" || code === "REACTION_COMMAND_DENIED",
+        );
+        equal("demotion before the removal removes nobody", f.state.updates.length, 0);
+        equal("demotion before the removal sends no receipt", announcements(f), 0);
+      } finally {
+        dispose();
+      }
+    }
+
+    {
+      const f = await fixture(kickRule);
+      markAdmins(f);
+      const dispose = wire(f);
+      let during = -1;
+      f.state.onParticipantsUpdate = (ids, action) => {
+        if (action !== "remove") return;
+        const gone = new Set(ids);
+        f.state.participants = f.state.participants.filter((row) => !gone.has(row.id));
+        during = announcements(f);
+        f.socket.ev.emit("group-participants.update", {
+          id: group,
+          action: "remove",
+          participants: ids.map((id) => ({ id })),
+        });
+      };
+      try {
+        receive(f, remember(f), "🫰");
+        equal("target removal still delivers", await completed(f), "DELIVERED");
+        equal("target removal runs once", f.state.updates.length, 1);
+        equal("the receipt waits until the target is gone", during, 0);
+        equal("the receipt is sent once", announcements(f), 1);
+        equal("the receipt is the only send", f.state.sent.length, 1);
+        equal("the receipt stays in the group", f.state.sent[0].chat, group);
+      } finally {
+        dispose();
+      }
+    }
+
+    {
+      const f = await fixture(kickRule);
+      markAdmins(f);
+      const dispose = wire(f);
+      f.state.onParticipantsUpdate = (ids, action) => {
+        if (action !== "remove") return;
+        const gone = new Set(ids);
+        f.state.participants = f.state.participants.filter((row) => !gone.has(row.id));
+        const requester = f.state.participants.find((row) => row.id === reactor);
+        if (requester) delete requester.admin;
+        f.socket.ev.emit("group-participants.update", {
+          id: group,
+          action: "remove",
+          participants: ids.map((id) => ({ id })),
+        });
+      };
+      try {
+        receive(f, remember(f), "🫰");
+        equal(
+          "a demoted requester is refused on the live roster",
+          await completed(f),
+          "REACTION_COMMAND_DENIED",
+        );
+        equal("the demoted requester was still removed", f.state.updates.length, 1);
+        equal("a demoted requester gets no receipt", announcements(f), 0);
+      } finally {
+        dispose();
+      }
+    }
+
+    {
+      const f = await fixture(kickRule);
+      markAdmins(f);
+      const dispose = wire(f);
+      f.state.onParticipantsUpdate = (ids, action) => {
+        if (action !== "remove") return;
+        const gone = new Set(ids);
+        f.state.participants = f.state.participants.filter((row) => !gone.has(row.id));
+        f.socket.ev.emit("group-participants.update", {
+          id: group,
+          action: "remove",
+          participants: ids.map((id) => ({ id })),
+        });
+        f.socket.ev.emit("group-participants.update", {
+          id: group,
+          action: "remove",
+          participants: [reactor],
+        });
+      };
+      try {
+        receive(f, remember(f), "🫰");
+        equal("requester removal aborts the receipt", await completed(f), "REACTION_CANCELLED");
+        equal("requester removal still removes the target", f.state.updates.length, 1);
+        equal("requester removal sends no receipt", announcements(f), 0);
+      } finally {
+        dispose();
+      }
+    }
+
+    {
+      const f = await fixture(kickRule);
+      markAdmins(f);
+      const dispose = wire(f);
+      let during = -1;
+      f.state.onParticipantsUpdate = (ids) => {
+        during = announcements(f);
+        f.socket.ev.emit("group-participants.update", {
+          id: group,
+          action: "remove",
+          participants: ids.map((id) => ({ id })),
+        });
+      };
+      const quoted = {
+        stanzaId: "typed-kick-target",
+        participant: author,
+        quotedMessage: { conversation: "hello" },
+      };
+      const typed = {
+        key: { remoteJid: group, id: "typed-kick-receipt", fromMe: false, participant: reactor },
+        message: {
+          extendedTextMessage: { text: `${prefix()}kick`, contextInfo: quoted },
+        },
+      };
+      try {
+        await handleCommand(f.socket, typed, `${prefix()}kick`, store.accountEpoch());
+        equal("typed !kick still announces before the removal notice", during, 1);
+        equal("typed !kick still removes once", f.state.updates.length, 1);
+        equal("typed !kick still announces once", announcements(f), 1);
+        equal("typed !kick removes the quoted author", f.state.updates[0].ids[0], author);
+      } finally {
+        dispose();
+      }
+    }
+  }
+
   section("disabling group refuses !group kick and leaves !kick alone");
   {
     const f = await fixture({
@@ -1735,6 +1903,171 @@ try {
       settings.set("gemini_base_url", "");
       settings.set("ai_stt_enabled", true);
       settings.set("gemini_api_key", "isolated-test-key");
+      if (server) await new Promise((resolve) => server.close(resolve));
+    }
+  }
+
+  section("reaction STT reads the key after DNS and uploads that key");
+  {
+    const dnsPromises = require("node:dns").promises;
+    const realLookup = dnsPromises.lookup;
+    const hits = [];
+    let server;
+    let lookedUp = false;
+    let mocked = null;
+    const restoreLookup = () => {
+      dnsPromises.lookup = realLookup;
+    };
+    const installLookup = (mutate) => {
+      lookedUp = false;
+      dnsPromises.lookup = async (hostname, options) => {
+        if (!lookedUp && hostname === "localhost") {
+          lookedUp = true;
+          mutate();
+        }
+        return realLookup(hostname, options);
+      };
+    };
+    try {
+      server = createServer((req, res) => {
+        hits.push({
+          authorization: req.headers.authorization || "",
+          apiKey: req.headers["x-goog-api-key"] || "",
+        });
+        req.resume();
+        req.on("end", () => {
+          if (res.writableEnded) return;
+          res.writeHead(200, { "content-type": "application/json" });
+          const body = String(req.url || "").includes("transcriptions")
+            ? { text: "sealed transcript" }
+            : {
+                candidates: [
+                  {
+                    content: { parts: [{ text: "sealed transcript" }], role: "model" },
+                    finishReason: "STOP",
+                  },
+                ],
+              };
+          res.end(JSON.stringify(body));
+        });
+      });
+      await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const port = server.address().port;
+      const f = await fixture();
+      mocked = stt.transcribe;
+      stt.transcribe = saved.transcribe;
+      const quote = () => ({
+        key: {
+          remoteJid: group,
+          id: `stt-dns-${++sequence}`,
+          fromMe: false,
+          participant: reactor,
+        },
+        message: {
+          extendedTextMessage: {
+            text: `${prefix()}stt`,
+            contextInfo: { quotedMessage: voiceMessage() },
+          },
+        },
+      });
+      const react = async (mutate) => {
+        hits.length = 0;
+        installLookup(mutate);
+        try {
+          return await saved
+            .stt(f.socket, quote(), [], `${prefix()}stt`, null, { source: "reaction" })
+            .then(
+              () => ({ error: null }),
+              (error) => ({ error }),
+            );
+        } finally {
+          restoreLookup();
+        }
+      };
+
+      settings.set("ai_stt_provider", "openai");
+      settings.set("openai_api_key", "openai-before-dns");
+      settings.set("openai_base_url", `http://localhost:${port}/v1`);
+      settings.set("ai_stt_enabled", true);
+      let outcome = await react(() => settings.set("ai_stt_enabled", false));
+      equal("DNS saw the OpenAI host", lookedUp, true);
+      equal("STT disabled during DNS uploads nothing", hits.length, 0);
+      equal(
+        "STT disabled during DNS is cancelled",
+        outcome.error?.message,
+        "REACTION_STT_DISABLED",
+      );
+
+      settings.set("ai_stt_enabled", true);
+      settings.set("openai_api_key", "openai-before-dns");
+      outcome = await react(() => settings.set("openai_api_key", ""));
+      equal("a key cleared during DNS uploads nothing", hits.length, 0);
+      equal("a key cleared during DNS is refused", outcome.error?.message, "STT_KEY_REQUIRED");
+
+      settings.set("openai_api_key", "openai-before-dns");
+      settings.set("gemini_api_key", "gemini-still-present");
+      outcome = await react(() => settings.set("ai_stt_provider", "gemini"));
+      equal("a provider switch during DNS uploads nothing", hits.length, 0);
+      equal("a provider switch during DNS is refused", outcome.error?.message, "STT_KEY_REQUIRED");
+
+      settings.set("ai_stt_provider", "openai");
+      settings.set("openai_api_key", "openai-before-dns");
+      outcome = await react(() => runtime.setEnabled("stt", false));
+      equal("disabling !stt during DNS uploads nothing", hits.length, 0);
+      equal(
+        "disabling !stt during DNS is cancelled",
+        outcome.error?.message,
+        "REACTION_COMMAND_DENIED",
+      );
+      runtime.setEnabled("stt", true);
+
+      settings.set("openai_api_key", "openai-before-dns");
+      outcome = await react(() => settings.set("openai_api_key", "openai-after-dns"));
+      equal("a rotated OpenAI key is the uploaded key", hits.length, 1);
+      equal(
+        "the OpenAI request uses the key read after DNS",
+        hits[0].authorization,
+        "Bearer openai-after-dns",
+      );
+      equal("a rotated OpenAI key still transcribes", outcome.error, null);
+
+      settings.set("ai_stt_provider", "gemini");
+      settings.set("gemini_api_key", "gemini-before-dns");
+      settings.set("gemini_base_url", `http://localhost:${port}`);
+      settings.set("openai_api_key", "");
+      outcome = await react(() => settings.set("gemini_api_key", "gemini-after-dns"));
+      equal("a rotated Gemini key is the uploaded key", hits.length, 1);
+      equal("the Gemini request uses the key read after DNS", hits[0].apiKey, "gemini-after-dns");
+      equal("a rotated Gemini key still transcribes", outcome.error, null);
+
+      settings.set("ai_stt_provider", "openai");
+      settings.set("openai_api_key", "typed-before-dns");
+      settings.set("openai_base_url", `http://localhost:${port}/v1`);
+      hits.length = 0;
+      installLookup(() => settings.set("openai_api_key", "typed-after-dns"));
+      let typed = null;
+      try {
+        typed = await saved.transcribe(audioBytes, "audio/ogg");
+      } finally {
+        restoreLookup();
+      }
+      equal("typed !stt still uploads once", hits.length, 1);
+      equal(
+        "typed !stt keeps the key captured before DNS",
+        hits[0].authorization,
+        "Bearer typed-before-dns",
+      );
+      equal("typed !stt still returns the transcript", typed, "sealed transcript");
+    } finally {
+      restoreLookup();
+      if (mocked) stt.transcribe = mocked;
+      runtime.setEnabled("stt", true);
+      settings.set("ai_stt_enabled", true);
+      settings.set("ai_stt_provider", "gemini");
+      settings.set("gemini_api_key", "isolated-test-key");
+      settings.set("gemini_base_url", "");
+      settings.set("openai_api_key", "");
+      settings.set("openai_base_url", "");
       if (server) await new Promise((resolve) => server.close(resolve));
     }
   }
