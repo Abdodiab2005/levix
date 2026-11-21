@@ -1303,6 +1303,62 @@ try {
     }
 
     {
+      const lidA = "201070000781@lid";
+      const pnA = "201070000781@s.whatsapp.net";
+      const lidB = "201070000782@lid";
+      const f = await fixture(kickRule);
+      store.storeLidPnMapping(lidA, memberB);
+      f.state.participants = [
+        { id: lidB, phoneNumber: memberB },
+        { id: lidA, phoneNumber: pnA },
+        { id: reactor, admin: "admin" },
+        { id: bot, admin: "admin" },
+      ];
+      const dispose = wire(f);
+      try {
+        receive(f, remember(f, original({ sender: lidA })), "🫰");
+        equal(
+          "canonical LID on row A and kickJid on row B is stale",
+          await completed(f),
+          "REACTION_STALE",
+        );
+        equal("conflicting kickJid removes nobody", f.state.updates.length, 0);
+        equal("conflicting kickJid claims nothing", count("reaction_executions"), 0);
+        equal("conflicting kickJid sends no receipt", announcements(f), 0);
+      } finally {
+        dispose();
+      }
+    }
+
+    {
+      const lidA = "201070000783@lid";
+      const pnA = "201070000783@s.whatsapp.net";
+      const lidB = "201070000784@lid";
+      const f = await fixture(kickRule);
+      store.storeLidPnMapping(lidA, memberB);
+      f.state.participants = [
+        { id: lidA, phoneNumber: pnA },
+        { id: lidB, phoneNumber: memberB },
+        { id: reactor, admin: "admin" },
+        { id: bot, admin: "admin" },
+      ];
+      const dispose = wire(f);
+      try {
+        receive(f, remember(f, original({ sender: lidA })), "🫰");
+        equal(
+          "stale candidate resolving to another member row is stale",
+          await completed(f),
+          "REACTION_STALE",
+        );
+        equal("conflicting candidate removes nobody", f.state.updates.length, 0);
+        equal("conflicting candidate claims nothing", count("reaction_executions"), 0);
+        equal("conflicting candidate sends no receipt", announcements(f), 0);
+      } finally {
+        dispose();
+      }
+    }
+
+    {
       const f = await fixture(kickRule);
       markAdmins(f);
       const dispose = wire(f);
