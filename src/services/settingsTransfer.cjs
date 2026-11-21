@@ -258,5 +258,11 @@ settings.onChange((key) => {
   // failure and the setting still saves; an in-flight turn must still see
   // that the value changed and changed back.
   store.bumpGeminiSignatureGeneration();
-  store.stripGeminiThoughtSignatures();
+  try {
+    store.stripGeminiThoughtSignatures();
+    store.clearGeminiSignatureSweepPending();
+  } catch (error) {
+    store.markGeminiSignatureSweepPending();
+    logger.error({ err: error, key }, "[ai_history] thought-signature sweep failed");
+  }
 });

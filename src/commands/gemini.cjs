@@ -718,8 +718,11 @@ module.exports = {
     // base URL or API key change, so A → B → A still drops signatures when the
     // fingerprint matches again.
     const turnPin = readGeminiProviderPin();
+    const turnProvider = turnPin.provider;
     const turnFingerprint = geminiSettingsFingerprint(turnPin);
     const turnGeneration = geminiSignatureGeneration();
+    const isPinnedProviderLive = () =>
+      String(settings.get("ai_provider") || "gemini").toLowerCase() === turnProvider;
 
     async function persistHistory(history) {
       if (!canSaveHistory() || !history?.length) return;
@@ -739,6 +742,7 @@ module.exports = {
         history: globalMemoryAccess(agentContext).read ? history : stripMemoryToolParts(history),
         status,
         context: agentContext,
+        provider: turnProvider,
         geminiPin: turnPin,
       });
       await persistHistory(result.history);
@@ -752,15 +756,16 @@ module.exports = {
       } catch (firstErr) {
         if (!isCurrentCaller(caller)) return;
         // A dead file URI poisons later calls. Retry only before any tool has
-        // run, and only when the error is positively that stale reference.
+        // run, only while the pinned provider is still the live one, and only
+        // when the error is positively that stale reference.
         // The cleaned history stays in memory until the retry succeeds.
-        if (firstErr?.toolsRan || !canSaveHistory()) throw firstErr;
+        if (firstErr?.toolsRan || !canSaveHistory() || !isPinnedProviderLive()) throw firstErr;
 
         const oldHistory = (await getChatHistoryAsync(chatId)) || [];
         if (!isCurrentCaller(caller)) return;
         if (!isFileReferenceError(firstErr, [parts, oldHistory])) throw firstErr;
         const cleaned = sanitizeHistoryForFiles(oldHistory);
-        if (!canSaveHistory()) throw firstErr;
+        if (!canSaveHistory() || !isPinnedProviderLive()) throw firstErr;
         logger.info(
           `[Gemini] sanitized history: ${oldHistory.length} -> ${cleaned.length}; retrying once`,
         );

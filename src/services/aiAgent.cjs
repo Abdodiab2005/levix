@@ -27,6 +27,7 @@ const {
 const { t, currentLang } = require("../utils/i18n.cjs");
 const aiIdentity = require("../config/ai-identity.cjs");
 const settings = require("../config/settings.cjs");
+const store = require("../db/store.cjs");
 const memory = require("../utils/memory.cjs");
 const { globalMemoryAccess } = require("./memoryPolicy.cjs");
 const { assertProviderBaseUrl, assertProviderRequestUrl } = require("../utils/providerUrl.cjs");
@@ -65,16 +66,18 @@ let clientCache = { key: null, baseUrl: null, client: null };
 // pass it through every request, including a later file-recovery retry.
 function readGeminiProviderPin() {
   return {
+    provider: String(settings.get("ai_provider") || "gemini").toLowerCase(),
     model: settings.get("gemini_model"),
     baseUrl: settings.get("gemini_base_url"),
     apiKey: settings.get("gemini_api_key"),
   };
 }
 
-function geminiClient(pin) {
-  const key = pin.apiKey;
+function geminiClient(pin = readGeminiProviderPin()) {
+  const resolved = pin || readGeminiProviderPin();
+  const key = resolved.apiKey;
   if (!key) return null;
-  const baseUrl = assertProviderBaseUrl(pin.baseUrl, {
+  const baseUrl = assertProviderBaseUrl(resolved.baseUrl, {
     allowLoopback: true,
   });
   if (clientCache.key !== key || clientCache.baseUrl !== baseUrl) {
@@ -729,7 +732,11 @@ registerProvider("gemini", new GeminiProvider());
  * Modular dispatch through getProvider().
  */
 async function runAgent(options = {}) {
-  const provider = getProvider();
+  const pinnedProvider = options.provider ?? options.geminiPin?.provider;
+  const provider =
+    pinnedProvider !== undefined && pinnedProvider !== null
+      ? getProvider(pinnedProvider)
+      : getProvider();
   const result = await provider.runTurn({
     ...options,
     history: trimHistory(options.history),
@@ -765,9 +772,23 @@ async function runGeminiTurn({
   const instruction = systemInstruction || buildSystemInstruction(context);
   const model = pin.model;
   // Signatures are stripped when gemini_model, gemini_base_url or gemini_api_key
-  // changes. A leftover 400 (a gateway alias, a restored backup) is retried once
-  // below; a provider switch does not drop function calls on its own.
-  let activeHistory = trimHistory(history);
+  // changes. When that sweep threw after the setting write, retry it before the
+  // first request; if it fails again, strip the loaded history in memory and
+  // leave the pending flag set. A leftover 400 (a gateway alias, a restored
+  // backup) is retried once below; a provider switch does not drop function
+  // calls on its own.
+  let inputHistory = history;
+  if (store.isGeminiSignatureSweepPending()) {
+    try {
+      store.stripGeminiThoughtSignatures();
+      store.clearGeminiSignatureSweepPending();
+    } catch (error) {
+      store.markGeminiSignatureSweepPending();
+      logger.error({ err: error }, "[ai_history] thought-signature sweep retry failed");
+    }
+    inputHistory = store.stripThoughtSignaturesFromHistory(inputHistory);
+  }
+  let activeHistory = trimHistory(inputHistory);
 
   // `ai.chats` rather than a hand-rolled contents array on purpose. Gemini 3
   // returns a `thoughtSignature` on the parts it produces and expects it back
@@ -928,6 +949,7 @@ module.exports = {
   runAgent,
   runGeminiTurn,
   readGeminiProviderPin,
+  geminiClient,
   buildTools,
   buildToolConfig,
   googleSearchEnabled,

@@ -1442,4 +1442,233 @@ section("the gemini settings fingerprint hashes the key");
   settings.set("gemini_model", "gemini-3.7-flash");
 }
 
+section("geminiClient() with no argument reads a default pin");
+{
+  const previousKey = settings.get("gemini_api_key");
+  const previousBaseUrl = settings.get("gemini_base_url");
+  try {
+    settings.set("gemini_api_key", "");
+    settings.set("gemini_base_url", "");
+    equal("geminiClient() returns null when no key is set", aiAgent.geminiClient(), null);
+    settings.set("gemini_api_key", "AIzaSyDefaultPinClientKey001");
+    const client = aiAgent.geminiClient();
+    ok("geminiClient() returns a client when a key is set", Boolean(client?.chats));
+  } finally {
+    settings.set("gemini_api_key", previousKey);
+    settings.set("gemini_base_url", previousBaseUrl);
+  }
+}
+
+section(
+  "a Gemini file error followed by switching ai_provider to openai does not retry or hit OpenAI",
+);
+{
+  const fileUri = "https://generativelanguage.googleapis.com/v1beta/files/sentfile1";
+  const openaiServer = await startProviderServer({
+    [OPENAI_PATH]: [openaiText("must never reach openai")],
+  });
+  settings.set("openai_api_key", "sk-test-openai-no-file-retry");
+  settings.set("openai_model", "gpt-5.4-mini");
+  settings.set("openai_base_url", openaiServer.baseUrl);
+  try {
+    await withGeminiServer(
+      [
+        () => {
+          settings.set("ai_provider", "openai");
+          return errorReply(404, "file expired");
+        },
+        textReply("must not retry on gemini after provider switch"),
+      ],
+      async (fake) => {
+        const chatId = "201000000193@s.whatsapp.net";
+        store.saveChatHistory(chatId, [
+          {
+            role: "user",
+            parts: [{ text: "look" }, { fileData: { fileUri, mimeType: "image/jpeg" } }],
+          },
+          {
+            role: "model",
+            parts: [{ text: "saw it", thoughtSignature: "keep-on-provider-switch-sig" }],
+          },
+        ]);
+        const before = storedHistory(chatId);
+        const sock = makeSocket();
+        await withLang("en", async () => {
+          await geminiCommand.execute(
+            sock,
+            makeMessage(chatId, "!ai provider switched during file failure"),
+            ["provider", "switched", "during", "file", "failure"],
+            "!ai provider switched during file failure",
+            null,
+            { invokedName: "ai" },
+          );
+          const text = sock.sent.at(-1)?.text || "";
+          const expected = settings
+            .redactSecrets(
+              t("bot.core.statusMessage.errorCard", {
+                lead: t("bot.ai.gemini.chatFailed"),
+                name: "Error",
+                message: t("bot.ai.gemini.errorGeneric"),
+              }),
+            )
+            .slice(0, 1500);
+          equal("no request reaches the OpenAI fake server", openaiServer.requests.length, 0);
+          equal("Gemini is not retried once ai_provider moved", fake.requests.length, 1);
+          equal("ends with the translated failure card", text, expected);
+          equal("stored history is untouched", storedHistory(chatId), before);
+        });
+      },
+    );
+  } finally {
+    settings.set("ai_provider", "gemini");
+    settings.set("openai_base_url", "");
+    await openaiServer.stop();
+  }
+}
+
+section("a failed thought-signature sweep self-heals on the next Gemini turn");
+{
+  await withGeminiServer(
+    [textReply("healed after one failed sweep"), textReply("healed after two failed sweeps")],
+    async (fake) => {
+      const chatId = "201000000194@s.whatsapp.net";
+      const otherChatId = "201000000195@s.whatsapp.net";
+      store.saveChatHistory(chatId, priorToolHistory("sweep-fail-once-sig"));
+      store.saveChatHistory(otherChatId, priorToolHistory("sweep-fail-once-other-sig"));
+
+      const realStrip = store.stripGeminiThoughtSignatures;
+      let calls = 0;
+      let failUntil = 1;
+      store.stripGeminiThoughtSignatures = function (...args) {
+        calls += 1;
+        if (calls <= failUntil) {
+          throw new Error("simulated sweep failure");
+        }
+        return realStrip.apply(this, args);
+      };
+
+      try {
+        settings.set("gemini_model", "gemini-3.1-pro-preview");
+        equal(
+          "the setting write succeeded despite the failed sweep",
+          settings.get("gemini_model"),
+          "gemini-3.1-pro-preview",
+        );
+        equal("the sweep was attempted on the setting change", calls, 1);
+        equal(
+          "the pending sweep flag is set in store",
+          store.isGeminiSignatureSweepPending(),
+          true,
+        );
+        ok(
+          "stored history still holds the old signature before the next turn",
+          storedHistory(chatId).includes("sweep-fail-once-sig"),
+        );
+
+        const sock = makeSocket();
+        await withLang("en", () =>
+          geminiCommand.execute(
+            sock,
+            makeMessage(chatId, "!ai heal stored history"),
+            ["heal", "stored", "history"],
+            "!ai heal stored history",
+            null,
+            { invokedName: "ai" },
+          ),
+        );
+
+        equal("the next turn retried the sweep", calls, 2);
+        equal(
+          "the pending sweep flag is cleared on success",
+          store.isGeminiSignatureSweepPending(),
+          false,
+        );
+        const firstSent = JSON.stringify(fake.body(0)?.contents || []);
+        ok(
+          "the request sent after retry has no signatures",
+          !firstSent.includes("sweep-fail-once-sig") && !firstSent.includes("thoughtSignature"),
+        );
+        ok("the request sent after retry keeps functionCall", firstSent.includes("functionCall"));
+        ok(
+          "the request sent after retry keeps functionResponse",
+          firstSent.includes("functionResponse"),
+        );
+
+        const healedRaw = storedHistory(chatId);
+        ok(
+          "stored history has no signatures after the retry",
+          !healedRaw.includes("sweep-fail-once-sig") && !healedRaw.includes("thoughtSignature"),
+        );
+        ok("stored history has no thought parts", !healedRaw.includes("private chain of thought"));
+        ok("stored history keeps its functionCall", healedRaw.includes("functionCall"));
+        ok("stored history keeps its functionResponse", healedRaw.includes("functionResponse"));
+        ok(
+          "stored history includes the new answer",
+          healedRaw.includes("healed after one failed sweep"),
+        );
+
+        const otherRaw = storedHistory(otherChatId);
+        ok(
+          "other stored chats were swept on the retry too",
+          !otherRaw.includes("sweep-fail-once-other-sig") && !otherRaw.includes("thoughtSignature"),
+        );
+        ok(
+          "other stored chats keep their function call/response pairs",
+          otherRaw.includes("functionCall") && otherRaw.includes("functionResponse"),
+        );
+
+        // Now force the sweep to fail twice in a row (on settings.set and on the turn's retry).
+        const twiceChatId = "201000000196@s.whatsapp.net";
+        store.saveChatHistory(twiceChatId, priorToolHistory("sweep-fail-twice-sig"));
+        store.saveChatHistory(otherChatId, priorToolHistory("sweep-fail-twice-other-sig"));
+        calls = 0;
+        failUntil = 2;
+
+        settings.set("gemini_model", "gemini-3.7-flash");
+        equal(
+          "the setting write succeeded on the first failure",
+          settings.get("gemini_model"),
+          "gemini-3.7-flash",
+        );
+        equal("the sweep threw on settings.set", calls, 1);
+        equal("the pending sweep flag is set", store.isGeminiSignatureSweepPending(), true);
+
+        await withLang("en", () =>
+          geminiCommand.execute(
+            sock,
+            makeMessage(twiceChatId, "!ai send while sweep fails twice"),
+            ["send", "while", "sweep", "fails", "twice"],
+            "!ai send while sweep fails twice",
+            null,
+            { invokedName: "ai" },
+          ),
+        );
+
+        equal("the turn retried the sweep and hit the second failure", calls, 2);
+        equal(
+          "the pending sweep flag stays set after the second failure",
+          store.isGeminiSignatureSweepPending(),
+          true,
+        );
+        const secondSent = JSON.stringify(fake.body(1)?.contents || []);
+        ok(
+          "the request sent after two sweep failures has no signatures",
+          !secondSent.includes("sweep-fail-twice-sig") && !secondSent.includes("thoughtSignature"),
+        );
+        ok(
+          "the request sent has no thought parts",
+          !secondSent.includes("private chain of thought"),
+        );
+        ok("the request sent keeps functionCall", secondSent.includes("functionCall"));
+        ok("the request sent keeps functionResponse", secondSent.includes("functionResponse"));
+      } finally {
+        store.stripGeminiThoughtSignatures = realStrip;
+        if (store.isGeminiSignatureSweepPending()) {
+          store.stripGeminiThoughtSignatures();
+        }
+      }
+    },
+  );
+}
+
 finish();

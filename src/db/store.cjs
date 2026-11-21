@@ -1747,6 +1747,7 @@ function rewriteStoredThoughtSignatures() {
 // turn already pinned. The turn captures this before its first request and
 // drops thought signatures when it has moved.
 let geminiSignatureGeneration = 0;
+let geminiSignatureSweepPending = false;
 
 function geminiSignatureGenerationNow() {
   return geminiSignatureGeneration;
@@ -1757,10 +1758,23 @@ function bumpGeminiSignatureGeneration() {
   return geminiSignatureGeneration;
 }
 
+function isGeminiSignatureSweepPending() {
+  return geminiSignatureSweepPending;
+}
+
+function markGeminiSignatureSweepPending() {
+  geminiSignatureSweepPending = true;
+}
+
+function clearGeminiSignatureSweepPending() {
+  geminiSignatureSweepPending = false;
+}
+
 // One transaction for every stored chat. Called when gemini_model,
 // gemini_base_url or gemini_api_key changes — not on each message.
 // Joins a transaction that is already open (backup restore) instead of
-// issuing a nested BEGIN IMMEDIATE. A failure is logged and rethrown.
+// issuing a nested BEGIN IMMEDIATE. A failure is logged, leaves a pending
+// sweep flag for the next Gemini turn, and is rethrown.
 function stripGeminiThoughtSignatures() {
   // node:sqlite reports whether a transaction is open on this connection.
   const nested = db.isTransaction === true;
@@ -1768,14 +1782,17 @@ function stripGeminiThoughtSignatures() {
   try {
     db.exec(nested ? `SAVEPOINT ${savepoint}` : "BEGIN IMMEDIATE");
   } catch (error) {
+    geminiSignatureSweepPending = true;
     logger.error({ err: error }, "[ai_history] thought-signature sweep could not start");
     throw error;
   }
   try {
     const updated = rewriteStoredThoughtSignatures();
     db.exec(nested ? `RELEASE ${savepoint}` : "COMMIT");
+    geminiSignatureSweepPending = false;
     return updated;
   } catch (error) {
+    geminiSignatureSweepPending = true;
     try {
       if (nested) {
         db.exec(`ROLLBACK TO ${savepoint}`);
@@ -2818,6 +2835,9 @@ module.exports = {
   stripGeminiThoughtSignatures,
   geminiSignatureGeneration: geminiSignatureGenerationNow,
   bumpGeminiSignatureGeneration,
+  isGeminiSignatureSweepPending,
+  markGeminiSignatureSweepPending,
+  clearGeminiSignatureSweepPending,
   deleteChatHistory,
   deleteAllChatHistories,
   // Baileys auth
