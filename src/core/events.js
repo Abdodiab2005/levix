@@ -10,6 +10,7 @@ import {
   storeLidPnMappings,
   upsertGroupDirectory,
 } from "../utils/storage.esm.js";
+import { cleanOwnerName, updateOwnerDisplayName } from "./connection.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
@@ -34,7 +35,7 @@ const {
  */
 export function setupEventListeners(
   sock,
-  { saveCreds, onConnectionUpdate, onHandshakeRejected } = {},
+  { saveCreds, onConnectionUpdate, onHandshakeRejected, isLiveSocket } = {},
 ) {
   const automation = createReactionAutomation(sock);
   const reactions = automation.intake;
@@ -43,6 +44,11 @@ export function setupEventListeners(
   // removeAllListeners by event name. A callback already queued by contained()
   // sees `disposed` and returns without calling its handler.
   let disposed = false;
+  const isLive = () => {
+    if (disposed) return false;
+    if (typeof isLiveSocket === "function") return isLiveSocket();
+    return true;
+  };
   const bindings = [];
   const listen = (emitter, event, fn) => {
     if (!emitter || typeof emitter.on !== "function") return;
@@ -100,6 +106,18 @@ export function setupEventListeners(
 
   // Save credentials
   if (saveCreds) listen(sock.ev, "creds.update", saveCreds);
+
+  // The linked account's own display name, from creds and from its own messages.
+  // Fenced to the live socket generation; the disposer removes it on detach.
+  const ownerName = (candidate) => {
+    if (!isLive() || !candidate) return;
+    try {
+      updateOwnerDisplayName(sock, candidate);
+    } catch (err) {
+      logger.warn({ err }, "[User Metadata] owner display name update failed");
+    }
+  };
+  listen(sock.ev, "creds.update", (update) => ownerName(cleanOwnerName(update?.me?.name)));
 
   // Address-book names (`name`) and push names (`notify`) from the linked phone.
   // No history sync — these events are the live contact list WhatsApp already
@@ -170,6 +188,9 @@ export function setupEventListeners(
   listen(sock.ev, "messages.upsert", (m) => {
     intake("messages.upsert", (payload) => reactions.observeUpsert(payload))(m);
     contained("messages.upsert", (payload) => handleIncomingMessage(sock, payload))(m);
+    const list = Array.isArray(m?.messages) ? m.messages : [];
+    const own = list.find((msg) => msg?.key?.fromMe && cleanOwnerName(msg.pushName));
+    if (own) ownerName(cleanOwnerName(own.pushName));
   });
 
   listen(

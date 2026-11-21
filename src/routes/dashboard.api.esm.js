@@ -183,7 +183,7 @@ accountProfile = createAccountProfile({
     };
   },
   getUserDisplayName(jid) {
-    return getUserMetadata(jid)?.displayName ?? null;
+    return getUserMetadata(jid, { exact: true })?.displayName ?? null;
   },
   // Existing WhatsApp image transport: HTTPS WhatsApp origins, DNS and
   // private-network validation, and the live session's proxy.

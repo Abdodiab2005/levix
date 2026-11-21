@@ -1340,12 +1340,46 @@ function applyContactRecord(contact) {
 }
 
 /**
+ * Get user metadata using exact self ids and verified aliases only.
+ * Checks exact user_jid, user_lid, device suffixes on the same JID, and verified
+ * mappings in lid_mapping. Never falls back to fuzzy digit matching across PN and LID namespaces.
+ */
+function getUserMetadataExact(identifier) {
+  if (!identifier) return null;
+  const raw = String(identifier).trim();
+  if (!raw) return null;
+
+  let row = userRow(raw);
+  if (row) return rowToUser(row);
+
+  row = q("SELECT * FROM user_metadata WHERE user_lid = ?").get(raw);
+  if (row) return rowToUser(row);
+
+  const norm = roleJid(raw);
+  if (norm && norm !== raw) {
+    row = userRow(norm) || q("SELECT * FROM user_metadata WHERE user_lid = ?").get(norm);
+    if (row) return rowToUser(row);
+  }
+
+  for (const alias of roleIdentityAliases(raw)) {
+    if (alias === raw) continue;
+    row = userRow(alias) || q("SELECT * FROM user_metadata WHERE user_lid = ?").get(alias);
+    if (row) return rowToUser(row);
+  }
+
+  return null;
+}
+
+/**
  * Get user metadata by JID, LID, or bare phone number. Four steps, in order:
  * exact JID, then LID, then phone, then a digits-only match against either
  * identifier (which is what handles the `:12` device suffixes).
+ *
+ * With `{ exact: true }`, matches exact self ids and verified aliases only.
  */
-function getUserMetadata(identifier) {
+function getUserMetadata(identifier, { exact = false } = {}) {
   if (!identifier) return null;
+  if (exact) return getUserMetadataExact(identifier);
 
   let row = userRow(identifier);
 
@@ -1774,19 +1808,37 @@ function isPairedSession() {
 
 function resolveUserPhone(jid) {
   if (!jid || String(jid).endsWith("@g.us")) return null;
-  const meta = getUserMetadata(jid);
-  if (meta?.phone) return String(meta.phone).replace(/\D/g, "");
-  const raw = String(jid);
+  const raw = String(jid).trim();
+  const isLid = raw.endsWith("@lid");
   const local = raw.split("@")[0].split(":")[0];
-  if (raw.includes("@lid") || !/^\d{8,15}$/.test(local)) {
+
+  if (isLid) {
     for (const candidate of [raw, local, `${local}@lid`]) {
       const pn = getPnForLid(candidate);
       if (!pn) continue;
       const digits = String(pn).split("@")[0].replace(/\D/g, "");
-      if (digits) return digits;
+      if (digits && /^\d{8,15}$/.test(digits)) return digits;
     }
-    if (raw.includes("@lid")) return null;
+    return null;
   }
+
+  const exact = userRow(raw) || userRow(`${local}@s.whatsapp.net`);
+  if (exact) {
+    if (exact.user_lid) {
+      const lidLocal = exact.user_lid.split("@")[0].split(":")[0];
+      const pnLocal = exact.user_jid?.split("@")[0].split(":")[0] || exact.phone_number;
+      if (lidLocal && pnLocal && lidLocal === pnLocal) {
+        const verifiedPn = getPnForLid(exact.user_lid);
+        if (!verifiedPn || verifiedPn.split("@")[0].split(":")[0] !== pnLocal) {
+          return null;
+        }
+      }
+    }
+    if (exact.phone_number && /^\d{8,15}$/.test(exact.phone_number)) {
+      return exact.phone_number;
+    }
+  }
+
   if (/^\d{8,15}$/.test(local)) return local;
   return null;
 }
@@ -2641,6 +2693,7 @@ module.exports = {
   rememberSavedName,
   applyContactRecord,
   getUserMetadata,
+  getUserMetadataExact,
   isUserOwner,
   isUserBotAdmin,
   getAllOwners,

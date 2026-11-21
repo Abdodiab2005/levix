@@ -28,6 +28,7 @@ import { useI18n } from "../context/I18nContext";
 import type { SessionStatus } from "../types";
 import {
   canDisplaySavedProfile,
+  cleanAccountName,
   mapSessionToCard,
   normalizeAccountId,
   shouldClearSavedProfile,
@@ -179,7 +180,7 @@ export function ConnectedAccountCard({
 
   const canShowProfile = canDisplaySavedProfile(status, retained);
   const visible = canShowProfile && retained?.profile.connected ? retained.profile : null;
-  const displayName = visible?.name || (connected ? cleanUserName(status?.user?.name) : null);
+  const displayName = visible?.name || (connected ? cleanAccountName(status?.user?.name) : null);
   const fetchPending = Boolean(connected && identity && settledIdentity !== identity);
   const isFetching = loading || fetchPending;
   const hasAnyProfileData = Boolean(

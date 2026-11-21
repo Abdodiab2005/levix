@@ -1,7 +1,8 @@
 // Static guard: enforce control-panel design system contract across views, gateway, and components.
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { finish, ok, ROOT, section, useTempDataDir } from "./harness.mjs";
+import { equal, finish, ok, ROOT, section, useTempDataDir } from "./harness.mjs";
 
 useTempDataDir("ui-design-contract");
 
@@ -100,9 +101,7 @@ const englishFallbackPattern = /\bt\(\s*["'][^"']+["']\s*\)\s*(?:\|\||\?\?)\s*["
 const jidTextPattern = /(?<![=$])\{[A-Za-z0-9_$.?]*\.jid\}/g;
 const iconButtonNoLabelPattern = /<IconButton\b(?![^>]*\blabel=)[^>]*>/g;
 
-for (const file of files) {
-  const relPath = relative(ROOT, file).replace(/\\/g, "/");
-  const rawContent = readFileSync(file, "utf8");
+function scanSource(relPath, rawContent, recordViolation) {
   const cleanContent = stripComments(rawContent);
   const lines = cleanContent.split("\n");
 
@@ -111,61 +110,72 @@ for (const file of files) {
 
     // Rule a: raw colours
     for (const match of line.matchAll(hexPattern)) {
-      checkViolation(relPath, "raw-color", match[0], lineNum);
+      recordViolation(relPath, "raw-color", match[0], lineNum);
     }
     for (const match of line.matchAll(palettePattern)) {
-      checkViolation(relPath, "raw-color", match[0], lineNum);
+      recordViolation(relPath, "raw-color", match[0], lineNum);
     }
     for (const match of line.matchAll(arbitraryColorPattern)) {
-      checkViolation(relPath, "raw-color", match[0], lineNum);
+      recordViolation(relPath, "raw-color", match[0], lineNum);
     }
 
     // Rule b: physical layout
     for (const match of line.matchAll(physicalPattern)) {
-      checkViolation(relPath, "physical-layout", match[0], lineNum);
+      recordViolation(relPath, "physical-layout", match[0], lineNum);
     }
 
     // Rule c: native element (exempting components/ui)
     if (!relPath.startsWith("frontend/src/components/ui/")) {
       for (const match of line.matchAll(nativeElementPattern)) {
-        checkViolation(relPath, "native-element", match[0], lineNum);
-      }
-    }
-
-    // Rule d: error message in JSX or toast
-    if (line.includes(".message")) {
-      const jsxErrorMatch =
-        /(?:\{|:\s*|=\s*\{?)([A-Za-z0-9_$]*(?:err|error|Error))\??\.message\s*\}?/.exec(line);
-      if (jsxErrorMatch) {
-        checkViolation(relPath, "error-message", `${jsxErrorMatch[1]}.message`, lineNum);
-      }
-      for (const match of line.matchAll(toastMessagePattern)) {
-        checkViolation(relPath, "error-message", match[0], lineNum);
+        recordViolation(relPath, "native-element", match[0], lineNum);
       }
     }
 
     // Rule e: English fallbacks after translation
     for (const match of line.matchAll(englishFallbackPattern)) {
-      checkViolation(relPath, "english-fallback", match[0], lineNum);
+      recordViolation(relPath, "english-fallback", match[0], lineNum);
     }
 
     // Rule f: raw WhatsApp identifiers
     for (const match of line.matchAll(jidTextPattern)) {
-      checkViolation(relPath, "raw-identifier", match[0], lineNum);
+      recordViolation(relPath, "raw-identifier", match[0], lineNum);
     }
     // JSX text only: a .ts file holds validation patterns, not rendered text.
     const waTextMatch = relPath.endsWith(".tsx")
       ? /(?:>|^)[^<"'`]*@(s\.whatsapp\.net|g\.us|lid)[^<"'`]*(?:<|$)/.exec(line)
       : null;
     if (waTextMatch) {
-      checkViolation(relPath, "raw-identifier", `@${waTextMatch[1]}`, lineNum);
-    }
-
-    // Rule g: icon-only IconButton without label
-    for (const match of line.matchAll(iconButtonNoLabelPattern)) {
-      checkViolation(relPath, "icon-button-label", match[0], lineNum);
+      recordViolation(relPath, "raw-identifier", `@${waTextMatch[1]}`, lineNum);
     }
   });
+
+  // Rule d: error message in JSX or toast (scanned across lines)
+  const jsxErrorPattern =
+    /(?:\{|:\s*|=\s*\{?)\s*([A-Za-z0-9_$]*(?:err|error|Error|fail|failure|Failure))\??\s*\.\s*message\s*\}?/g;
+  for (const match of cleanContent.matchAll(jsxErrorPattern)) {
+    const lineNum = cleanContent.slice(0, match.index).split("\n").length;
+    recordViolation(relPath, "error-message", `${match[1]}.message`, lineNum);
+  }
+  for (const match of cleanContent.matchAll(toastMessagePattern)) {
+    const lineNum = cleanContent.slice(0, match.index).split("\n").length;
+    recordViolation(relPath, "error-message", match[0].replace(/\s+/g, " "), lineNum);
+  }
+
+  // Rule g: icon-only IconButton without label (scanned across lines)
+  const iconButtonTagPattern = /<IconButton\b[\s\S]*?>/g;
+  for (const match of cleanContent.matchAll(iconButtonTagPattern)) {
+    const tag = match[0];
+    if (!/\blabel=/.test(tag)) {
+      const lineNum = cleanContent.slice(0, match.index).split("\n").length;
+      recordViolation(relPath, "icon-button-label", tag.replace(/\s+/g, " "), lineNum);
+    }
+  }
+}
+
+for (const file of files) {
+  const relPath = relative(ROOT, file).replace(/\\/g, "/");
+  const rawContent = readFileSync(file, "utf8");
+  scanSource(relPath, rawContent, checkViolation);
 }
 
 section("violations match the allowlist exactly");
@@ -189,6 +199,51 @@ for (const [key, entry] of allowed) {
     `stale entry: the violation is gone, delete it (${entry.reason})`,
   );
   ok(`allowlist entry ${entry.file} [${entry.rule}] has a reason`, Boolean(entry.reason));
+}
+
+section("proves multiline unlabeled IconButton and multiline {failure.message} are caught");
+{
+  const tempDir = mkdtempSync(join(tmpdir(), "ui-contract-fixtures-"));
+  try {
+    const iconButtonFixture = join(tempDir, "UnlabeledButton.tsx");
+    writeFileSync(
+      iconButtonFixture,
+      `export function UnlabeledButton() {\n  return (\n    <IconButton\n      icon={<span />}\n      onClick={() => {}}\n    />\n  );\n}`,
+    );
+
+    const errorFixture = join(tempDir, "ErrorDisplay.tsx");
+    writeFileSync(
+      errorFixture,
+      `export function ErrorDisplay({ failure }: { failure: { message: string } }) {\n  return (\n    <div>\n      {\n        failure.message\n      }\n    </div>\n  );\n}`,
+    );
+
+    const tempFound = [];
+    const recordTemp = (file, rule, matched, line) => {
+      tempFound.push({ file, rule, matched, line });
+    };
+
+    scanSource("UnlabeledButton.tsx", readFileSync(iconButtonFixture, "utf8"), recordTemp);
+    scanSource("ErrorDisplay.tsx", readFileSync(errorFixture, "utf8"), recordTemp);
+
+    const iconHit = tempFound.find(
+      (h) => h.file === "UnlabeledButton.tsx" && h.rule === "icon-button-label",
+    );
+    ok("multiline unlabeled IconButton is caught", Boolean(iconHit));
+    equal("unlabeled IconButton caught on line 3", iconHit?.line, 3);
+
+    const errorHit = tempFound.find(
+      (h) =>
+        h.file === "ErrorDisplay.tsx" &&
+        h.rule === "error-message" &&
+        h.matched === "failure.message",
+    );
+    ok("multiline {failure.message} is caught", Boolean(errorHit));
+    ok("failure.message line detected", errorHit?.line === 4 || errorHit?.line === 5);
+  } finally {
+    try {
+      rmSync(tempDir, { recursive: true, force: true });
+    } catch {}
+  }
 }
 
 finish();

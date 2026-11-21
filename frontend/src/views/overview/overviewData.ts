@@ -60,7 +60,16 @@ const PROVIDER_KEY_MAP: Record<string, string> = {
   anthropic: "anthropic_api_key",
 };
 
-const NON_FAILURE_REACTION_CODES = new Set(["DELIVERED", "NO_MATCH", "DUPLICATE"]);
+const NON_FAILURE_REACTION_CODES = new Set([
+  "DELIVERED",
+  "NO_MATCH",
+  "DUPLICATE",
+  "RATE_LIMIT",
+  "CAPACITY",
+  "REACTION_CAPACITY",
+  "BUSY",
+  "ADMITTED",
+]);
 
 export function isActiveProviderKeyConfigured(
   settings: readonly SettingRowLike[] | null | undefined,
@@ -131,7 +140,9 @@ export function buildAttentionItems(input: {
         targetView: "connection",
         targetHash: "#connection",
       });
-    } else if (isLinked && status.state !== "connected") {
+    } else if (isLinked && status.state === "disconnected") {
+      // Warn on actionable unexpected disconnect while the operator wants it running.
+      // Intentional pauses (idle) or transient in-flight states raise nothing.
       items.push({
         id: "session",
         tone: "warn",
@@ -224,20 +235,9 @@ export function buildAttentionItems(input: {
     }
   }
 
-  // 5. Reaction rules enabled while global switch is off, or rules whose last outcome failed
+  // 5. Rules whose last outcome failed (real execution failures).
+  // Intentional pauses (automation switch off) raise nothing.
   if (reactions && Array.isArray(reactions.rules)) {
-    const anyEnabledRule = reactions.rules.some((rule) => rule.enabled);
-    if (reactions.automation?.enabled === false && anyEnabledRule) {
-      items.push({
-        id: "reactions_switch_off",
-        tone: "warn",
-        titleKey: "overviewAttentionReactionsOffTitle",
-        metaKey: "overviewAttentionReactionsOffMeta",
-        actionKey: "overviewAttentionReactionsAction",
-        targetView: "reactions",
-        targetHash: "#reactions",
-      });
-    }
     const failedRules = reactions.rules.filter((rule) =>
       isReactionOutcomeFailure(rule.runtime?.lastCode),
     ).length;
