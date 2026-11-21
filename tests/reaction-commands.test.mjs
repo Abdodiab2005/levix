@@ -1236,6 +1236,73 @@ try {
     }
 
     {
+      const lidTarget = "201070000778@lid";
+      const phoneTarget = "201070000778@s.whatsapp.net";
+      const f = await fixture(kickRule);
+      f.state.participants = [
+        { id: lidTarget, phoneNumber: phoneTarget },
+        { id: reactor, admin: "admin" },
+        { id: bot, admin: "admin" },
+      ];
+      const dispose = wire(f);
+      f.state.onParticipantsUpdate = (ids, action) => {
+        if (action !== "remove") return;
+        const gone = new Set(ids);
+        f.state.participants = f.state.participants.filter((row) => !gone.has(row.id));
+        f.socket.ev.emit("group-participants.update", {
+          id: group,
+          action: "remove",
+          participants: [phoneTarget],
+        });
+      };
+      try {
+        receive(f, remember(f, original({ sender: lidTarget })), "🫰");
+        equal("LID kick with phone-only removal notice delivers", await completed(f), "DELIVERED");
+        equal("LID kick removes the LID target once", f.state.updates.length, 1);
+        equal("LID kick removal uses the roster LID", f.state.updates[0].ids[0], lidTarget);
+        equal("phone-only removal notice preserves the receipt", announcements(f), 1);
+      } finally {
+        dispose();
+      }
+    }
+
+    {
+      const lidTarget = "201070000779@lid";
+      const phoneTarget = "201070000779@s.whatsapp.net";
+      const otherLid = "201070000780@lid";
+      const f = await fixture(kickRule);
+      f.state.participants = [
+        { id: lidTarget, phoneNumber: phoneTarget },
+        { id: otherLid, phoneNumber: memberB },
+        { id: reactor, admin: "admin" },
+        { id: bot, admin: "admin" },
+      ];
+      const dispose = wire(f);
+      f.state.onParticipantsUpdate = (ids, action) => {
+        if (action !== "remove") return;
+        const gone = new Set(ids);
+        f.state.participants = f.state.participants.filter((row) => !gone.has(row.id));
+        f.socket.ev.emit("group-participants.update", {
+          id: group,
+          action: "remove",
+          participants: [memberB],
+        });
+      };
+      try {
+        receive(f, remember(f, original({ sender: lidTarget })), "🫰");
+        equal(
+          "removal notice for a different phone JID aborts the receipt",
+          await completed(f),
+          "REACTION_CANCELLED",
+        );
+        equal("the target was still removed once", f.state.updates.length, 1);
+        equal("a different member's phone removal suppresses the receipt", announcements(f), 0);
+      } finally {
+        dispose();
+      }
+    }
+
+    {
       const f = await fixture(kickRule);
       markAdmins(f);
       const dispose = wire(f);
@@ -1912,7 +1979,9 @@ try {
     const dnsPromises = require("node:dns").promises;
     const realLookup = dnsPromises.lookup;
     const hits = [];
+    const otherHits = [];
     let server;
+    let otherServer;
     let lookedUp = false;
     let mocked = null;
     const restoreLookup = () => {
@@ -1928,31 +1997,35 @@ try {
         return realLookup(hostname, options);
       };
     };
-    try {
-      server = createServer((req, res) => {
-        hits.push({
-          authorization: req.headers.authorization || "",
-          apiKey: req.headers["x-goog-api-key"] || "",
-        });
-        req.resume();
-        req.on("end", () => {
-          if (res.writableEnded) return;
-          res.writeHead(200, { "content-type": "application/json" });
-          const body = String(req.url || "").includes("transcriptions")
-            ? { text: "sealed transcript" }
-            : {
-                candidates: [
-                  {
-                    content: { parts: [{ text: "sealed transcript" }], role: "model" },
-                    finishReason: "STOP",
-                  },
-                ],
-              };
-          res.end(JSON.stringify(body));
-        });
+    const respond = (bucket) => (req, res) => {
+      bucket.push({
+        authorization: req.headers.authorization || "",
+        apiKey: req.headers["x-goog-api-key"] || "",
       });
+      req.resume();
+      req.on("end", () => {
+        if (res.writableEnded) return;
+        res.writeHead(200, { "content-type": "application/json" });
+        const body = String(req.url || "").includes("transcriptions")
+          ? { text: "sealed transcript" }
+          : {
+              candidates: [
+                {
+                  content: { parts: [{ text: "sealed transcript" }], role: "model" },
+                  finishReason: "STOP",
+                },
+              ],
+            };
+        res.end(JSON.stringify(body));
+      });
+    };
+    try {
+      server = createServer(respond(hits));
+      otherServer = createServer(respond(otherHits));
       await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+      await new Promise((resolve) => otherServer.listen(0, "127.0.0.1", resolve));
       const port = server.address().port;
+      const otherPort = otherServer.address().port;
       const f = await fixture();
       mocked = stt.transcribe;
       stt.transcribe = saved.transcribe;
@@ -1972,6 +2045,7 @@ try {
       });
       const react = async (mutate) => {
         hits.length = 0;
+        otherHits.length = 0;
         installLookup(mutate);
         try {
           return await saved
@@ -2022,6 +2096,24 @@ try {
       runtime.setEnabled("stt", true);
 
       settings.set("openai_api_key", "openai-before-dns");
+      settings.set("openai_base_url", `http://localhost:${port}/v1`);
+      outcome = await react(() => {
+        settings.set("openai_base_url", `http://localhost:${otherPort}/v1`);
+        settings.set("openai_api_key", "openai-moved-endpoint-key");
+      });
+      equal(
+        "OpenAI endpoint + key change during DNS hits neither server",
+        hits.length + otherHits.length,
+        0,
+      );
+      equal(
+        "OpenAI endpoint + key change during DNS aborts",
+        outcome.error?.message,
+        "REACTION_CANCELLED",
+      );
+
+      settings.set("openai_api_key", "openai-before-dns");
+      settings.set("openai_base_url", `http://localhost:${port}/v1`);
       outcome = await react(() => settings.set("openai_api_key", "openai-after-dns"));
       equal("a rotated OpenAI key is the uploaded key", hits.length, 1);
       equal(
@@ -2035,6 +2127,23 @@ try {
       settings.set("gemini_api_key", "gemini-before-dns");
       settings.set("gemini_base_url", `http://localhost:${port}`);
       settings.set("openai_api_key", "");
+      outcome = await react(() => {
+        settings.set("gemini_base_url", `http://localhost:${otherPort}`);
+        settings.set("gemini_api_key", "gemini-moved-endpoint-key");
+      });
+      equal(
+        "Gemini endpoint + key change during DNS hits neither server",
+        hits.length + otherHits.length,
+        0,
+      );
+      equal(
+        "Gemini endpoint + key change during DNS aborts",
+        outcome.error?.message,
+        "REACTION_CANCELLED",
+      );
+
+      settings.set("gemini_api_key", "gemini-before-dns");
+      settings.set("gemini_base_url", `http://localhost:${port}`);
       outcome = await react(() => settings.set("gemini_api_key", "gemini-after-dns"));
       equal("a rotated Gemini key is the uploaded key", hits.length, 1);
       equal("the Gemini request uses the key read after DNS", hits[0].apiKey, "gemini-after-dns");
@@ -2069,6 +2178,7 @@ try {
       settings.set("openai_api_key", "");
       settings.set("openai_base_url", "");
       if (server) await new Promise((resolve) => server.close(resolve));
+      if (otherServer) await new Promise((resolve) => otherServer.close(resolve));
     }
   }
 
