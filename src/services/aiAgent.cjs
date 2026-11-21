@@ -69,10 +69,20 @@ const {
 // change between one message and the next.
 let clientCache = { key: null, baseUrl: null, client: null };
 
-function geminiClient() {
-  const key = settings.get("gemini_api_key");
+// One synchronous snapshot. Callers read it before the turn's first await and
+// pass it through every request, including a later file-recovery retry.
+function readGeminiProviderPin() {
+  return {
+    model: settings.get("gemini_model"),
+    baseUrl: settings.get("gemini_base_url"),
+    apiKey: settings.get("gemini_api_key"),
+  };
+}
+
+function geminiClient(pin) {
+  const key = pin.apiKey;
   if (!key) return null;
-  const baseUrl = assertProviderBaseUrl(settings.get("gemini_base_url"), {
+  const baseUrl = assertProviderBaseUrl(pin.baseUrl, {
     allowLoopback: true,
   });
   if (clientCache.key !== key || clientCache.baseUrl !== baseUrl) {
@@ -889,14 +899,19 @@ async function runGeminiTurn({
   systemInstruction = null,
   search = null,
   signal,
+  geminiPin = null,
 } = {}) {
-  const genAI = geminiClient();
+  // Before the endpoint check. A settings change during that await must not
+  // move this turn onto another model, endpoint or key. A pin from the command
+  // covers the file-recovery retry, which is a second call.
+  const pin = geminiPin || readGeminiProviderPin();
+  const genAI = geminiClient(pin);
   if (!genAI) throw new Error(t("bot.ai.aiAgent.noGeminiKey"));
-  await assertProviderRequestUrl(settings.get("gemini_base_url"), { allowLoopback: true });
+  await assertProviderRequestUrl(pin.baseUrl, { allowLoopback: true });
 
   const stepBudget = maxSteps ?? settings.get("ai_max_tool_steps");
   const instruction = systemInstruction || buildSystemInstruction(context);
-  const model = settings.get("gemini_model");
+  const model = pin.model;
   // Signatures are stripped when gemini_model, gemini_base_url or gemini_api_key
   // changes. A leftover 400 (a gateway alias, a restored backup) is retried once
   // below; a provider switch does not drop function calls on its own.
@@ -1067,6 +1082,7 @@ module.exports = {
   validateAutoReplyDecision,
   validateDecisionCalls,
   runGeminiTurn,
+  readGeminiProviderPin,
   buildTools,
   buildToolConfig,
   googleSearchEnabled,
