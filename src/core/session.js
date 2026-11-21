@@ -860,6 +860,8 @@ export class WhatsAppSession {
     this.#pairing = !isPaired;
 
     const disposeListeners = this.attachListeners(sock, {
+      generation,
+      isLiveSocket: () => this.#socket === sock && this.#generation === generation,
       saveCreds,
       onConnectionUpdate: (update) => this.#onConnectionUpdate(generation, update),
       onHandshakeRejected: (response) => this.#onHandshakeRejected(generation, sock, response),

@@ -238,4 +238,49 @@ ok(
   ),
 );
 
+section("legacy fabricated PN rows and verified PN provenance");
+{
+  // A legacy row that stored a LID as a fabricated PN without a verified mapping
+  store.saveUserMetadata({
+    jid: "777777777777777@s.whatsapp.net",
+    lid: "777777777777777@lid",
+    phone: "777777777777777",
+  });
+  equal(
+    "fabricated PN row returns no phone",
+    store.resolveUserPhone("777777777777777@s.whatsapp.net"),
+    null,
+  );
+  equal(
+    "fabricated PN peer has no phone",
+    store.describePeer("777777777777777@s.whatsapp.net").phone,
+    null,
+  );
+  equal(
+    "unmapped LID with stored digits returns no phone",
+    store.resolveUserPhone("777777777777777@lid"),
+    null,
+  );
+
+  // A verified PN mapped in lid_mapping
+  store.storeLidPnMapping("888888888888888@lid", "201088888888@s.whatsapp.net");
+  equal(
+    "verified mapping resolves phone for LID",
+    store.resolveUserPhone("888888888888888@lid"),
+    "201088888888",
+  );
+  equal(
+    "verified mapping peer shows formatted phone",
+    store.describePeer("888888888888888@lid").phone,
+    "+201088888888",
+  );
+
+  // Genuine PN-addressed contact without unverified matching LID
+  equal(
+    "genuine PN returns phone digits",
+    store.resolveUserPhone("201099999999@s.whatsapp.net"),
+    "201099999999",
+  );
+}
+
 finish();

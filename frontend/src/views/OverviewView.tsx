@@ -19,7 +19,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import type { ViewTab } from "../components/Sidebar";
 import { useToast } from "../components/Toasts";
-import { Button, Card, ListRow, Section, StatTile, UserText } from "../components/ui";
+import { Button, Card, CodeText, ListRow, Section, StatTile, UserText } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
 import { usePlusStatus } from "../hooks/usePlusStatus";
 import type {
@@ -100,9 +100,8 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
     navigateTo(action.view, action.hash);
   };
 
-  const statusRefreshKey = `${status?.state ?? "init"}|${status?.since ?? ""}`;
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: statusRefreshKey re-reads the sources when the session state changes.
+  // Fetch summaries once on mount and on explicit refresh.
+  // Never refetch the entire dataset on session state transitions.
   useEffect(() => {
     let mounted = true;
     Promise.allSettled([
@@ -123,13 +122,22 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
           setSettings(settingsRes.value.settings);
         }
         if (schedulesRes.status === "fulfilled" && Array.isArray(schedulesRes.value?.schedules)) {
-          setSchedules(schedulesRes.value.schedules);
+          const allSchedules = schedulesRes.value.schedules;
+          const upcoming = selectUpcomingSchedules(allSchedules, 3);
+          const failed = allSchedules.filter(
+            (s) => s.lastDeliveryStatus === "failed" || Boolean(s.lastError),
+          );
+          const bounded = new Map<string, ScheduleItem>();
+          for (const s of [...upcoming, ...failed]) {
+            bounded.set(s.id, s);
+          }
+          setSchedules([...bounded.values()]);
         }
         if (reactionsRes.status === "fulfilled" && reactionsRes.value) {
           setReactions(reactionsRes.value);
         }
         if (todosRes.status === "fulfilled" && Array.isArray(todosRes.value?.todos)) {
-          setTodos(todosRes.value.todos);
+          setTodos(todosRes.value.todos.slice(0, 10));
         }
       })
       .finally(() => {
@@ -138,7 +146,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
     return () => {
       mounted = false;
     };
-  }, [statusRefreshKey, t, toast]);
+  }, [t, toast]);
 
   const formatUptime = (seconds: number) => {
     const days = Math.floor(seconds / 86400);
@@ -281,6 +289,11 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
                 <div className="flex flex-col gap-2">
                   {upcomingSchedules.map((item) => {
                     const whenText = item.whenByLocale?.[language] || item.when;
+                    const targetText = resolveScheduleTarget(item);
+                    const isPhone =
+                      item.targetNameSource === "phone" ||
+                      targetText.startsWith("+") ||
+                      /^\+?\d+$/.test(targetText);
                     return (
                       <ListRow
                         key={item.id}
@@ -292,9 +305,15 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
                           </UserText>
                         }
                         meta={
-                          <UserText lines={1}>
-                            {`${resolveScheduleTarget(item)} · ${whenText}`}
-                          </UserText>
+                          <span className="inline-flex min-w-0 items-center gap-1.5 text-xs text-muted">
+                            {isPhone ? (
+                              <CodeText className="text-xs text-muted">{targetText}</CodeText>
+                            ) : (
+                              <UserText lines={1}>{targetText}</UserText>
+                            )}
+                            <span aria-hidden="true">·</span>
+                            <span>{whenText}</span>
+                          </span>
                         }
                         onClick={() => onNavigate("schedules")}
                       />

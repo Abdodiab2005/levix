@@ -13,9 +13,9 @@ import { DisconnectReason } from "@whiskeysockets/baileys";
 import { createRequire } from "module";
 import { bootstrapAdmins, bootstrapOwners } from "../utils/permissions.esm.js";
 import {
-  accountEpoch,
   getAllBotAdmins,
   getAllOwners,
+  getUserMetadata,
   saveUserMetadata,
   upsertGroupDirectory,
 } from "../utils/storage.esm.js";
@@ -185,7 +185,6 @@ async function finishConnectionOpen(sock, initializeScheduledJobs) {
   // Everyone else is granted from the dashboard (Roles) or with `!perm`, and
   // is already a row in user_metadata by the time we get here.
   await saveBotOwnerMetadata(sock);
-  bindOwnerDisplayName(sock);
 
   const { userJid: botPn, userLid: botLid } = resolveOwnerSocketIds(sock);
 
@@ -217,17 +216,15 @@ async function finishConnectionOpen(sock, initializeScheduledJobs) {
   await cacheAllGroups(sock);
 }
 
-const boundOwnerSockets = new WeakSet();
-
-function cleanOwnerName(value) {
+export function cleanOwnerName(value) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed || trimmed === "~") return null;
-  if (/^\d+(?::\d+)?@(?:s\.whatsapp\.net|lid|g\.us)$/.test(trimmed)) return null;
+  if (/^[^\s@]+@(?:s\.whatsapp\.net|c\.us|lid|g\.us|broadcast|newsletter)$/i.test(trimmed)) return null;
   return trimmed.slice(0, 256);
 }
 
-function resolveOwnerSocketIds(sock) {
+export function resolveOwnerSocketIds(sock) {
   const rawId = typeof sock?.user?.id === "string" ? sock.user.id.trim() : "";
   const rawLid = typeof sock?.user?.lid === "string" ? sock.user.lid.trim() : "";
   const idLocal = rawId.split(":")[0].split("@")[0];
@@ -255,51 +252,21 @@ function resolveOwnerSocketIds(sock) {
   return { phoneNumber, userJid, userLid };
 }
 
-function bindOwnerDisplayName(sock) {
-  if (!sock || typeof sock !== "object" || boundOwnerSockets.has(sock)) return;
-  const ev = sock.ev;
-  if (!ev || typeof ev.on !== "function") return;
-  boundOwnerSockets.add(sock);
-  const openEpoch = accountEpoch();
-  // One write per distinct name: the owner's messages arrive often and the name rarely changes.
-  let lastName = null;
-  const remember = (candidate) => {
-    if (!candidate || candidate === lastName) return;
-    lastName = candidate;
-    void saveBotOwnerMetadata(sock, candidate);
-  };
-
-  const onCredsUpdate = (update) => {
-    if (accountEpoch() !== openEpoch) return;
-    remember(cleanOwnerName(update?.me?.name));
-  };
-
-  const onMessagesUpsert = (m) => {
-    if (accountEpoch() !== openEpoch) return;
-    const list = Array.isArray(m?.messages) ? m.messages : [];
-    for (const msg of list) {
-      if (!msg?.key?.fromMe) continue;
-      const candidate = cleanOwnerName(msg.pushName);
-      if (candidate) {
-        remember(candidate);
-        break;
-      }
-    }
-  };
-
-  const onConnectionUpdate = (update) => {
-    if (update?.connection === "close") {
-      try {
-        ev.off?.("creds.update", onCredsUpdate);
-        ev.off?.("messages.upsert", onMessagesUpsert);
-        ev.off?.("connection.update", onConnectionUpdate);
-      } catch {}
-    }
-  };
-
-  ev.on("creds.update", onCredsUpdate);
-  ev.on("messages.upsert", onMessagesUpsert);
-  ev.on("connection.update", onConnectionUpdate);
+export function updateOwnerDisplayName(sock, candidate) {
+  const verified = cleanOwnerName(candidate);
+  if (!verified) return;
+  const { phoneNumber, userJid, userLid } = resolveOwnerSocketIds(sock);
+  const primaryJid = userJid || userLid;
+  if (!primaryJid) return;
+  const existing = getUserMetadata(primaryJid, { exact: true });
+  if (existing?.displayName === verified) return;
+  saveUserMetadata({
+    jid: primaryJid,
+    lid: userLid,
+    phone: phoneNumber,
+    displayName: verified,
+  });
+  logger.info(`[User Metadata] Updated bot owner display name: ${verified}`);
 }
 
 // Record the paired WhatsApp account as the bot's first owner. Whoever scanned

@@ -1810,8 +1810,6 @@
   "overviewAttentionScheduleFailedTitle": "Falló la entrega de un mensaje programado",
   "overviewAttentionScheduleFailedMeta": "Falló {n} entrega programada. Revisa y reintenta en Programación.",
   "overviewAttentionScheduleFailedAction": "Ver programación",
-  "overviewAttentionReactionsOffTitle": "Reglas de reacción activadas con el interruptor general apagado",
-  "overviewAttentionReactionsOffMeta": "Activa el interruptor general de reacciones para que funcionen las reglas.",
   "overviewAttentionReactionsFailedTitle": "Falló la ejecución de una regla de reacción",
   "overviewAttentionReactionsFailedMeta": "{n} regla de reacción registró un fallo en su última ejecución.",
   "overviewAttentionReactionsAction": "Revisar reglas",

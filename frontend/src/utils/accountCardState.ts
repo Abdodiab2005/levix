@@ -42,6 +42,18 @@ const positive = (value: number | null | undefined): number | null =>
   typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
 
 /**
+ * Shared name validator. Rejects non-string, whitespace-only, "~", and raw JID-shaped strings.
+ */
+export function cleanAccountName(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "~") return null;
+  if (/^[^\s@]+@(?:s\.whatsapp\.net|c\.us|lid|g\.us|broadcast|newsletter)$/i.test(trimmed))
+    return null;
+  return trimmed.slice(0, 256);
+}
+
+/**
  * Normalize a socket user JID by stripping any `:device` suffix.
  * Returns null for invalid or non-user JIDs.
  */

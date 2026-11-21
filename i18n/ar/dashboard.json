@@ -1810,8 +1810,6 @@
   "overviewAttentionScheduleFailedTitle": "فشل تسليم رسالة مجدولة",
   "overviewAttentionScheduleFailedMeta": "فشل تسليم {n} رسالة مجدولة. راجعها وأعِد المحاولة من الجدولة.",
   "overviewAttentionScheduleFailedAction": "عرض الجدولة",
-  "overviewAttentionReactionsOffTitle": "قواعد التفاعل مفعّلة بينما المفتاح العام معطّل",
-  "overviewAttentionReactionsOffMeta": "فعّل مفتاح التفاعلات العام لتعمل القواعد المفعّلة.",
   "overviewAttentionReactionsFailedTitle": "فشل تنفيذ قاعدة تفاعل",
   "overviewAttentionReactionsFailedMeta": "أبلغت {n} قاعدة تفاعل عن فشل في آخر تشغيل.",
   "overviewAttentionReactionsAction": "مراجعة القواعد",

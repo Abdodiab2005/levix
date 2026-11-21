@@ -353,6 +353,15 @@ try {
     p = (await res.json()).profile;
     equal("LID-only account has no phone", p.phone, null);
     equal("new LID account does not leak previous owner's metadata name", p.name, null);
+
+    // 6. Another contact with the same digits as the owner's LID does not supply the name (F2)
+    store.saveUserMetadata({
+      jid: `${ONLY_LID.split("@")[0]}@s.whatsapp.net`,
+      displayName: "Different Contact Name",
+    });
+    res = await http.call("/dashboard/api/account/profile");
+    p = (await res.json()).profile;
+    equal("exact self IDs only: contact with same digits cannot supply name", p.name, null);
   }
 } catch (error) {
   ok("account profile panel tests run", false, error?.stack || String(error));

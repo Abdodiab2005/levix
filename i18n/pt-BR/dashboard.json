@@ -1810,8 +1810,6 @@
   "overviewAttentionScheduleFailedTitle": "Falha na entrega de mensagem agendada",
   "overviewAttentionScheduleFailedMeta": "Falha em {n} entrega agendada. Revise e tente novamente em Agendamentos.",
   "overviewAttentionScheduleFailedAction": "Ver agendamentos",
-  "overviewAttentionReactionsOffTitle": "Regras de reação ativadas com a chave geral desligada",
-  "overviewAttentionReactionsOffMeta": "Ative a chave geral de reações para que as regras funcionem.",
   "overviewAttentionReactionsFailedTitle": "Falha na execução de regra de reação",
   "overviewAttentionReactionsFailedMeta": "{n} regra de reação registrou falha na última execução.",
   "overviewAttentionReactionsAction": "Revisar regras",

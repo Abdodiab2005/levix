@@ -1,6 +1,7 @@
 // Static and pure-logic tests for the PR-5 Overview screen. No React import.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { cleanAccountName } from "../frontend/src/utils/accountCardState.ts";
 import {
   buildAttentionItems,
   buildQuickActions,
@@ -85,8 +86,9 @@ section("Needs Attention: only real issues appear and healthy state is empty");
   });
   equal("healthy state produces zero attention items", healthy.length, 0);
 
-  // Linked but not connected + active AI provider without key + Plus expired (when offered)
-  // + failed schedule + reaction switch off with enabled rule + failed reaction outcome
+  // Linked but unexpectedly disconnected + active AI provider without key + Plus expired (when offered)
+  // + failed schedule + failed reaction outcome.
+  // Intentional pauses (such as paused reaction automation or an idle stopped session) raise nothing.
   const issues = buildAttentionItems({
     status: { state: "disconnected", connected: false, linked: true },
     settings: [
@@ -141,10 +143,16 @@ section("Needs Attention: only real issues appear and healthy state is empty");
   });
 
   equal(
-    "all six attention conditions detected",
+    "actionable faults detected while intentional pauses raise nothing",
     issues.map((item) => item.id).join(","),
-    "session,ai_key,plus,schedule_failed,reactions_switch_off,reactions_failed",
+    "session,ai_key,plus,schedule_failed,reactions_failed",
   );
+
+  // Stop leaves linked session in idle -> produces zero session attention items (intentional pause)
+  const idleSession = buildAttentionItems({
+    status: { state: "idle", connected: false, linked: true },
+  });
+  equal("idle stopped session produces zero attention items", idleSession.length, 0);
 
   // Plus not offered on this platform -> no Plus attention item even if entitlement is expired
   const noPlusPlatform = buildAttentionItems({
@@ -159,11 +167,21 @@ section("Needs Attention: only real issues appear and healthy state is empty");
   equal("Plus attention hidden where Plus is not offered", noPlusPlatform.length, 0);
 
   equal(
-    "DELIVERED and NO_MATCH are not reaction failures",
-    isReactionOutcomeFailure("DELIVERED") || isReactionOutcomeFailure("NO_MATCH"),
+    "routine admission outcomes (DELIVERED, NO_MATCH, DUPLICATE, RATE_LIMIT, CAPACITY, BUSY) are not reaction failures",
+    isReactionOutcomeFailure("DELIVERED") ||
+      isReactionOutcomeFailure("NO_MATCH") ||
+      isReactionOutcomeFailure("DUPLICATE") ||
+      isReactionOutcomeFailure("RATE_LIMIT") ||
+      isReactionOutcomeFailure("CAPACITY") ||
+      isReactionOutcomeFailure("REACTION_CAPACITY") ||
+      isReactionOutcomeFailure("BUSY"),
     false,
   );
-  equal("ACTION_FAILED is a reaction failure", isReactionOutcomeFailure("ACTION_FAILED"), true);
+  equal(
+    "ACTION_FAILED is a real reaction failure",
+    isReactionOutcomeFailure("ACTION_FAILED"),
+    true,
+  );
   equal(
     "active provider key check follows ai_provider",
     isActiveProviderKeyConfigured([
@@ -173,6 +191,23 @@ section("Needs Attention: only real issues appear and healthy state is empty");
     ]),
     false,
   );
+}
+
+section("cleanAccountName rejects raw JID strings and invalid values");
+{
+  equal("rejects phone JID", cleanAccountName("201234567890@s.whatsapp.net"), null);
+  equal("rejects LID JID", cleanAccountName("1234567890@lid"), null);
+  equal("rejects group JID", cleanAccountName("12345-6789@g.us"), null);
+  equal("rejects tilde", cleanAccountName("~"), null);
+  equal("rejects whitespace", cleanAccountName("   "), null);
+  equal("rejects null/undefined", cleanAccountName(null), null);
+  equal("accepts valid display name", cleanAccountName("  Levix Owner  "), "Levix Owner");
+}
+
+section("OverviewView design contract: isolated phone labels and bounded fetch");
+{
+  ok("overview isolates phone label in CodeText", overview.includes("<CodeText"));
+  ok("overview does not re-fetch on session transitions", !overview.includes("statusRefreshKey"));
 }
 
 section("Quick Actions adapt to connection state and target operational routes");

@@ -1810,8 +1810,6 @@
   "overviewAttentionScheduleFailedTitle": "Scheduled message delivery failed",
   "overviewAttentionScheduleFailedMeta": "{n} scheduled delivery failed. Review and retry in Schedules.",
   "overviewAttentionScheduleFailedAction": "View schedules",
-  "overviewAttentionReactionsOffTitle": "Reaction rules enabled while global switch is off",
-  "overviewAttentionReactionsOffMeta": "Turn on the global reaction switch so enabled rules can run.",
   "overviewAttentionReactionsFailedTitle": "Reaction rule execution failed",
   "overviewAttentionReactionsFailedMeta": "{n} reaction rule reported a failure on its last run.",
   "overviewAttentionReactionsAction": "Review rules",
