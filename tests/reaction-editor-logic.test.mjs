@@ -16,6 +16,7 @@ import {
   previewTransitionsPhrase,
   quoteNoteKey,
   reactionDraftIssues,
+  resolvePersonVariant,
   resolveSenderMode,
   selectReactionCommand,
   selectSenderMode,
@@ -543,6 +544,42 @@ section("previewText renders natural prose without form labels");
     arSentence.includes("\u2066!weather\u2069"),
   );
 
+  const arOwnerAdminDraft = selectSenderMode(baseOwnerDraft, "owner_group_admin");
+  const arOwnerAdminSentence = previewText(makeT(arCatalog), arOwnerAdminDraft, "!");
+  ok(
+    "the Arabic owner-or-admin sentence starts the clause with the verb",
+    arOwnerAdminSentence.startsWith("عندما تضيف أنت أو مشرف في المجموعة"),
+    arOwnerAdminSentence,
+  );
+
+  const enRemoveMixedDraft = {
+    ...selectSenderMode(baseOwnerDraft, "owner_group_admin"),
+    transitions: ["remove"],
+  };
+  const enRemoveMixedSentence = previewText(makeT(enCatalog), enRemoveMixedDraft, "!");
+  equal(
+    "en remove-only mixed sentence matches expected target shape",
+    enRemoveMixedSentence,
+    "When you or a group admin removes 👍 from any supported message in Family, Levix runs !weather and sends the result to this chat.",
+  );
+  ok(
+    "English mixed remove-only says 'from'",
+    enRemoveMixedSentence.includes("from any supported message"),
+  );
+  ok(
+    "English mixed remove-only never says 'removes 👍 to'",
+    !enRemoveMixedSentence.includes("removes 👍 to"),
+  );
+
+  equal("resolvePersonVariant owner is second", resolvePersonVariant("owner"), "second");
+  equal(
+    "resolvePersonVariant owner_group_admin is mixed",
+    resolvePersonVariant("owner_group_admin"),
+    "mixed",
+  );
+  equal("resolvePersonVariant group_admin is third", resolvePersonVariant("group_admin"), "third");
+  equal("resolvePersonVariant any is third", resolvePersonVariant("any"), "third");
+
   const senderModes = [
     selectSenderMode(baseOwnerDraft, "owner"),
     selectSenderMode(baseOwnerDraft, "owner_group_admin"),
@@ -563,23 +600,31 @@ section("previewText renders natural prose without form labels");
   ];
 
   const destinations = ["same_chat", "owner_private"];
+  const personVariants = ["second", "mixed", "third"];
 
   for (const [locale, catalog] of Object.entries(catalogs)) {
     const t = makeT(catalog);
-    for (const isSecondPerson of [true, false]) {
+    for (const person of personVariants) {
       for (const transitions of transitionSets) {
         const clause = previewTransitionsPhrase(
           t,
           transitions,
-          isSecondPerson,
+          person,
           "👍",
           "any supported message",
         );
         ok(
-          `${locale} clause ${isSecondPerson ? "2nd" : "3rd"} person (${transitions.join("+")}) has no '{'`,
+          `${locale} clause ${person} person (${transitions.join("+")}) has no '{'`,
           !clause.includes("{"),
           clause,
         );
+        if (locale === "ar" && person === "mixed") {
+          ok(
+            `Arabic owner-or-admin clause (${transitions.join("+")}) starts with the verb`,
+            clause.startsWith("تضيف") || clause.startsWith("تغيّر") || clause.startsWith("تزيل"),
+            clause,
+          );
+        }
       }
     }
   }

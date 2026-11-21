@@ -1129,41 +1129,63 @@ export function previewRequesterPhrase(
   }
 }
 
+export type ReactionPersonVariant = "second" | "mixed" | "third";
+
+export function resolvePersonVariant(mode: ReactionSenderMode): ReactionPersonVariant {
+  if (mode === "owner") return "second";
+  if (mode === "owner_group_admin") return "mixed";
+  return "third";
+}
+
 export function previewTransitionsPhrase(
   t: (key: string) => string,
   transitions: readonly ReactionTransition[],
-  isSecondPerson: boolean,
+  person: ReactionPersonVariant | boolean,
   emoji: string = t("reactionPreviewEmoji"),
   types: string = t("reactionPreviewAllTypes"),
+  who?: string,
 ): string {
+  const normalizedPerson: ReactionPersonVariant =
+    person === true || person === "second" ? "second" : person === "mixed" ? "mixed" : "third";
+
   const hasAdd = transitions.includes("add");
   const hasChange = transitions.includes("change");
   const hasRemove = transitions.includes("remove");
 
-  let key: string;
+  const suffix =
+    normalizedPerson === "second" ? "You" : normalizedPerson === "mixed" ? "Mixed" : "";
+
+  let baseKey: string;
   if (hasAdd && hasChange && hasRemove) {
-    key = isSecondPerson ? "reactionPreviewClauseAllYou" : "reactionPreviewClauseAll";
+    baseKey = "reactionPreviewClauseAll";
   } else if (hasAdd && hasChange) {
-    key = isSecondPerson ? "reactionPreviewClauseAddChangeYou" : "reactionPreviewClauseAddChange";
+    baseKey = "reactionPreviewClauseAddChange";
   } else if (hasAdd && hasRemove) {
-    key = isSecondPerson ? "reactionPreviewClauseAddRemoveYou" : "reactionPreviewClauseAddRemove";
+    baseKey = "reactionPreviewClauseAddRemove";
   } else if (hasChange && hasRemove) {
-    key = isSecondPerson
-      ? "reactionPreviewClauseChangeRemoveYou"
-      : "reactionPreviewClauseChangeRemove";
+    baseKey = "reactionPreviewClauseChangeRemove";
   } else if (hasAdd) {
-    key = isSecondPerson ? "reactionPreviewClauseAddYou" : "reactionPreviewClauseAdd";
+    baseKey = "reactionPreviewClauseAdd";
   } else if (hasChange) {
-    key = isSecondPerson ? "reactionPreviewClauseChangeYou" : "reactionPreviewClauseChange";
+    baseKey = "reactionPreviewClauseChange";
   } else if (hasRemove) {
-    key = isSecondPerson ? "reactionPreviewClauseRemoveYou" : "reactionPreviewClauseRemove";
+    baseKey = "reactionPreviewClauseRemove";
   } else {
-    key = isSecondPerson ? "reactionPreviewClauseAddYou" : "reactionPreviewClauseAdd";
+    baseKey = "reactionPreviewClauseAdd";
   }
 
+  const key = `${baseKey}${suffix}`;
+
+  const resolvedWho =
+    who ??
+    (normalizedPerson === "second"
+      ? t("reactionPreviewRequesterOwner")
+      : normalizedPerson === "mixed"
+        ? t("reactionPreviewRequesterOwnerGroupAdmin")
+        : t("reactionPreviewRequesterAnyone"));
   const resolvedEmoji = emoji || t("reactionPreviewEmoji");
   const resolvedTypes = types || t("reactionPreviewAllTypes");
-  return fill(t(key), { emoji: resolvedEmoji, types: resolvedTypes });
+  return fill(t(key), { who: resolvedWho, emoji: resolvedEmoji, types: resolvedTypes });
 }
 
 export function previewDestinationPhrase(
@@ -1212,11 +1234,11 @@ export function previewText(
   prefix = "!",
 ): string {
   const mode = resolveSenderMode(draft);
-  const isSecondPerson = mode === "owner";
+  const person = resolvePersonVariant(mode);
   const who = previewRequesterPhrase(t, mode, draft.senderIds.length);
   const emoji = draft.emoji || t("reactionPreviewEmoji");
   const types = previewTypesPhrase(t, draft.originalTypes, draft.action);
-  const clause = previewTransitionsPhrase(t, draft.transitions, isSecondPerson, emoji, types);
+  const clause = previewTransitionsPhrase(t, draft.transitions, person, emoji, types, who);
   const chat = draft.chatName.trim() || t("reactionPreviewChat");
   const action = previewActionPhrase(t, draft.action, prefix);
   const destination = previewDestinationPhrase(t, draft.destination);
