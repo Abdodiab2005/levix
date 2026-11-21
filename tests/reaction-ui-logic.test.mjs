@@ -1,4 +1,12 @@
-import { createAutomationWriter, sortReactionRules } from "../frontend/src/utils/reactionRules.ts";
+import {
+  createAutomationWriter,
+  displayRuleMeta,
+  isRawJid,
+  reactionOutcomeKey,
+  ruleChatLabel,
+  shouldShowAutomationOffCallout,
+  sortReactionRules,
+} from "../frontend/src/utils/reactionRules.ts";
 import { equal, finish, ok, section } from "./harness.mjs";
 
 function deferred() {
@@ -261,6 +269,90 @@ section("sortReactionRules recent / priority / chat");
   ok(
     "never-run disabled rules have no runtime",
     !("runtime" in rules[2]) && !("runtime" in rules[3]),
+  );
+}
+
+section("callout when global reaction switch is off while rules are enabled");
+{
+  equal(
+    "off switch with enabled rule shows callout",
+    shouldShowAutomationOffCallout(false, [{ enabled: false }, { enabled: true }]),
+    true,
+  );
+  equal(
+    "off switch with all rules disabled hides callout",
+    shouldShowAutomationOffCallout(false, [{ enabled: false }]),
+    false,
+  );
+  equal(
+    "on switch with enabled rule hides callout",
+    shouldShowAutomationOffCallout(true, [{ enabled: true }]),
+    false,
+  );
+}
+
+section("outcomes and chat labels never expose raw codes or raw JIDs");
+{
+  equal("delivered maps to key", reactionOutcomeKey("DELIVERED"), "reactionOutcomeDelivered");
+  equal(
+    "command denied maps to key",
+    reactionOutcomeKey("REACTION_COMMAND_DENIED"),
+    "reactionOutcomeReactionCommandDenied",
+  );
+  equal(
+    "command unsupported maps to key",
+    reactionOutcomeKey("REACTION_COMMAND_UNSUPPORTED"),
+    "reactionOutcomeReactionCommandUnsupported",
+  );
+  equal(
+    "command failed maps to key",
+    reactionOutcomeKey("REACTION_COMMAND_FAILED"),
+    "reactionOutcomeReactionCommandFailed",
+  );
+  equal(
+    "unknown code maps to generic unknown key",
+    reactionOutcomeKey("RAW_INTERNAL_CODE"),
+    "reactionStatusUnknown",
+  );
+  equal("null outcome maps to never ran", reactionOutcomeKey(null), "reactionNeverRan");
+
+  equal("detects group JID as raw", isRawJid("120363000001@g.us"), true);
+  equal("detects LID as raw", isRawJid("1001@lid"), true);
+  equal("human name is not raw JID", isRawJid("Family Group"), false);
+  equal(
+    "chatName equal to raw JID falls back to safe label",
+    ruleChatLabel(
+      { chatJid: "120363000001@g.us", chatName: "120363000001@g.us" },
+      new Map(),
+      "Unnamed group",
+    ),
+    "Unnamed group",
+  );
+  equal(
+    "meta identifies legacy and selected sender modes",
+    displayRuleMeta({
+      id: "r1",
+      revision: "1",
+      chatJid: "120363000001@g.us",
+      chatName: "Group",
+      priority: 10,
+      enabled: true,
+      enabledAt: null,
+      valid: true,
+      statuses: ["READY"],
+      overlaps: [],
+      runtime: { lastCode: null, lastAt: null, counts: {} },
+      definition: {
+        version: 2,
+        emoji: "👍",
+        transitions: ["add"],
+        originalTypes: ["text"],
+        senders: { role: "bot_admin", ids: [] },
+        command: { name: "gemini", args: ["Summarize"] },
+        destination: { mode: "same_chat" },
+      },
+    }).senderMode,
+    "custom",
   );
 }
 

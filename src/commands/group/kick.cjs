@@ -9,6 +9,12 @@ const moderationAction = require("../../utils/moderationAction.cjs");
 const { senderCandidates, targetFromCommand } = moderationAction;
 const { t } = require("../../utils/i18n.cjs");
 
+function reactionRefusal() {
+  const error = new Error("REACTION_COMMAND_DENIED");
+  error.code = "REACTION_COMMAND_DENIED";
+  throw error;
+}
+
 module.exports = {
   name: "kick",
   chat: "group",
@@ -23,6 +29,7 @@ module.exports = {
     const targetJid = target?.jid;
 
     if (!targetJid) {
+      if (ctx?.silentDenials) reactionRefusal();
       return await sock.sendMessage(groupId, {
         text: t("bot.group.kick.noTarget"),
       });
@@ -36,12 +43,14 @@ module.exports = {
         .filter(Boolean)
         .some((id) => targetCandidates.some((candidate) => sameUserSync(id, candidate)))
     ) {
+      if (ctx?.silentDenials) reactionRefusal();
       return await sock.sendMessage(groupId, { text: t("bot.group.kick.self") });
     }
 
     // Bot owners/admins are privileged across chats and cannot be removed by
     // a group-only admin through an alternate LID/PN representation.
     if (targetCandidates.some((candidate) => hasBotPrivilegesSync(candidate, groupMetadata))) {
+      if (ctx?.silentDenials) reactionRefusal();
       return await sock.sendMessage(groupId, {
         text: t("bot.group.kick.botPrivileged"),
       });
@@ -49,6 +58,7 @@ module.exports = {
 
     // Check if the target is also an admin
     if (targetCandidates.some((candidate) => isAdminInGroupSync(groupMetadata, candidate))) {
+      if (ctx?.silentDenials) reactionRefusal();
       return await sock.sendMessage(groupId, {
         text: t("bot.group.kick.targetIsAdmin"),
       });
@@ -65,31 +75,48 @@ module.exports = {
         member,
         reason,
       });
+      const announce = () =>
+        sock.sendMessage(groupId, {
+          text: kickMessage,
+          mentions: [targetJid],
+        });
+      const remove = () =>
+        moderationAction.kickGroupMember(sock, {
+          groupId,
+          groupMetadata,
+          targetCandidates,
+          requesterCandidates: senderCandidates(msg, sock),
+          requesterFromMe: Boolean(msg.key?.fromMe),
+          requesterRule: ctx?.nested === true ? "nested" : "direct",
+          accountEpoch: ctx?.accountEpoch,
+          effectGuard: ctx?.effectGuard,
+        });
 
-      // Announce the kick before performing it
-      await sock.sendMessage(groupId, {
-        text: kickMessage,
-        mentions: [targetJid],
-      });
+      // A reaction announces only after WhatsApp confirms the removal. A typed
+      // !kick still announces first, then removes.
+      if (ctx?.source === "reaction") {
+        const result = await remove();
+        if (!result.kicked) {
+          if (ctx?.silentDenials) reactionRefusal();
+          await sock.sendMessage(groupId, { text: t("bot.group.kick.failed") });
+          return;
+        }
+        await announce();
+        return;
+      }
 
-      // The announcement above awaited, so the roster may have changed: the
-      // requester is re-checked on a fresh roster, as the dispatcher checked it.
-      const result = await moderationAction.kickGroupMember(sock, {
-        groupId,
-        groupMetadata,
-        targetCandidates,
-        requesterCandidates: senderCandidates(msg, sock),
-        requesterFromMe: Boolean(msg.key?.fromMe),
-        requesterRule: ctx?.nested === true ? "nested" : "direct",
-        accountEpoch: ctx?.accountEpoch,
-      });
+      await announce();
+      const result = await remove();
       if (!result.kicked) {
+        if (ctx?.silentDenials) reactionRefusal();
         await sock.sendMessage(groupId, {
           text: t("bot.group.kick.failed"),
         });
       }
     } catch (error) {
+      if (error?.code === "REACTION_COMMAND_DENIED") throw error;
       logger.error({ err: error, command: "kick" }, "Error in !kick command");
+      if (ctx?.silentDenials) throw error;
       await sock.sendMessage(groupId, {
         text: t("bot.group.kick.failed"),
       });

@@ -5,7 +5,9 @@ import { REACTION_LIMITS } from "./reactions.js";
 const require = createRequire(import.meta.url);
 const store = require("../db/store.cjs");
 const { MAX_IDENTITY_ALIASES } = require("./limits.cjs");
-const { definitionIssues, exactJid } = require("./rules.cjs");
+const { definitionIssues, exactJid, normalizeDefinition } = require("./rules.cjs");
+const { listReactionCommands } = require("./commandEligibility.cjs");
+const COMMAND_LANGS = new Set(["ar", "en", "pt-BR", "es-419"]);
 const { linkedIdentity } = require("../messaging/identity.cjs");
 const { getCached } = require("../utils/groupMetadataCache.cjs");
 const status = require("./status.cjs");
@@ -157,16 +159,23 @@ function triggerIndex(items) {
   return index;
 }
 
+function shownDefinition(definition) {
+  return definition && typeof definition === "object" && !Array.isArray(definition)
+    ? normalizeDefinition(definition)
+    : definition;
+}
+
 function ruleView(item, index, context) {
   const { row, definition, valid } = item;
+  const shown = shownDefinition(definition);
   const statuses = [];
   if (!context.automation.enabled) statuses.push("AUTOMATION_OFF");
   if (!row.enabled) statuses.push("RULE_OFF");
   if (!valid) statuses.push("RULE_INVALID");
   if (!context.connection.connected) statuses.push("NOT_CONNECTED");
   if (valid) {
-    statuses.push(...reactionActionReadiness(definition.action));
-    if (definition.destination.mode === "owner_private" && !context.owner.linked)
+    statuses.push(...reactionActionReadiness(shown?.command?.name || shown?.action));
+    if (shown?.destination?.mode === "owner_private" && !context.owner.linked)
       statuses.push("OWNER_NOT_LINKED");
   }
   const buckets = triggerKeys(definition)
@@ -191,7 +200,7 @@ function ruleView(item, index, context) {
     priority: row.priority,
     enabled: row.enabled === 1,
     enabledAt: row.enabled_at,
-    definition,
+    definition: shown,
     valid,
     statuses,
     overlaps,
@@ -227,31 +236,62 @@ export function overview() {
   };
 }
 
+function prepareWrite(definition) {
+  if (!definition || typeof definition !== "object" || Array.isArray(definition)) return definition;
+  let clone;
+  try {
+    clone = structuredClone(definition);
+  } catch {
+    return definition;
+  }
+  if (!Object.hasOwn(clone, "transitions")) clone.transitions = ["add"];
+  if (definitionIssues(clone).length) return clone;
+  return normalizeDefinition(clone);
+}
+
+function prepareBody(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return body;
+  let clone;
+  try {
+    clone = structuredClone(body);
+  } catch {
+    return body;
+  }
+  clone.definition = prepareWrite(clone.definition);
+  return clone;
+}
+
+export function listCommands(lang) {
+  return listReactionCommands(null, COMMAND_LANGS.has(lang) ? lang : "en");
+}
+
 export function checkDraft(body) {
   return { issues: draftIssues(body) };
 }
 
 export function createRule(body) {
-  assertValid(draftIssues(body));
+  const prepared = prepareBody(body);
+  assertValid(draftIssues(prepared));
   return write(() => {
     const row = store.saveReactionRule({
-      chatJid: body.chatJid,
-      priority: body.priority,
-      definition: body.definition,
+      chatJid: prepared.chatJid,
+      priority: prepared.priority,
+      definition: prepared.definition,
     });
     return view(row.id);
   });
 }
 
 export function updateRule(id, body) {
-  assertValid(draftIssues(body, true));
-  currentRule(id, body.revision);
+  const prepared = prepareBody(body);
+  assertValid(draftIssues(prepared, true));
+  currentRule(id, prepared.revision);
   return write(() => {
     const row = store.saveReactionRule({
       id,
-      chatJid: body.chatJid,
-      priority: body.priority,
-      definition: body.definition,
+      chatJid: prepared.chatJid,
+      priority: prepared.priority,
+      definition: prepared.definition,
     });
     return view(row.id);
   });

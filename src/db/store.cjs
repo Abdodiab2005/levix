@@ -336,11 +336,17 @@ function isReactionChatConfigured(chatJid) {
 
 // Bound trusted alias expansion. Excess/ambiguous aliases fail closed at intake.
 function reactionIdentityAliases(jid) {
+  if (typeof jid !== "string" || !jid) return [];
   if (jid.endsWith("@g.us")) return [jid];
   const pn = jid.endsWith("@lid") ? getPnForLid(jid) : jid;
   if (!pn) return [jid];
   const rows = q(`SELECT lid FROM lid_mapping WHERE pn = ? LIMIT ${MAX_IDENTITY_ALIASES}`).all(pn);
-  return [...new Set([jid, pn, ...rows.map((row) => normalizeJid(row.lid))])];
+  const lids = [];
+  for (const row of rows) {
+    if (!acceptableMappingSide(row.lid, "@lid")) continue;
+    lids.push(normalizeJid(row.lid));
+  }
+  return [...new Set([jid, pn, ...lids])];
 }
 
 // Hash-only negative lookup state survives restart. Saturation replaces markers
@@ -963,7 +969,112 @@ function deleteQrCode() {
 // --- LID <-> phone number (Baileys v7) ---
 // ===================================================================
 
+// A real LID or phone JID. Device suffixes are accepted; the normalized local
+// part has to be digits. Callers that must keep the raw stored text check
+// first, then write the original string.
+function acceptableMappingSide(value, suffix) {
+  const norm = roleJid(value);
+  if (typeof norm !== "string" || !norm.endsWith(suffix)) return false;
+  const local = norm.slice(0, -suffix.length);
+  return /^\d{1,30}$/.test(local);
+}
+
+// Raw event text, before roleJid. A non-numeric device suffix must not
+// disappear inside normalizeJid, and a bare phone is not a PN JID.
+const RAW_MAPPING_JID = /^(\d{1,30})(?::(\d{1,3}))?@(lid|s\.whatsapp\.net)$/;
+
+function rawMappingJid(value, domain) {
+  if (typeof value !== "string") return false;
+  const match = RAW_MAPPING_JID.exec(value.trim());
+  return Boolean(match && match[3] === domain);
+}
+
+// Baileys rc14 emits { lid, pn } or an array of those. Older builds emit a
+// map of lid -> pn. A pair is stored only when both sides are real JIDs.
+function lidMappingsFromUpdate(updates) {
+  const mappings = [];
+  const push = (lid, pn) => {
+    if (!rawMappingJid(lid, "lid") || !rawMappingJid(pn, "s.whatsapp.net")) return;
+    if (!acceptableMappingSide(lid, "@lid") || !acceptableMappingSide(pn, "@s.whatsapp.net"))
+      return;
+    mappings.push({ lid: roleJid(lid), pn: roleJid(pn), deviceIndex: 0 });
+  };
+  if (Array.isArray(updates)) {
+    for (const item of updates) push(item?.lid, item?.pn);
+    return mappings;
+  }
+  if (updates && typeof updates === "object") {
+    if (Object.hasOwn(updates, "lid") || Object.hasOwn(updates, "pn")) {
+      push(updates.lid, updates.pn);
+      return mappings;
+    }
+    for (const [lid, pn] of Object.entries(updates)) push(lid, pn);
+  }
+  return mappings;
+}
+
+function latestReactionSlot(slotKeys) {
+  if (!Array.isArray(slotKeys) || !slotKeys.length || slotKeys.length > 64) return null;
+  if (slotKeys.some((key) => typeof key !== "string" || key.length > 128)) return null;
+  const row = q(
+    `SELECT emoji, timestamp_ms FROM reaction_state WHERE slot_key IN (${sqlIn(slotKeys)}) ORDER BY timestamp_ms DESC LIMIT 1`,
+  ).get(...slotKeys);
+  if (!row) return null;
+  return { emoji: row.emoji, timestampMs: Number(row.timestamp_ms) };
+}
+
+function latestReactionEmoji(slotKeys) {
+  return latestReactionSlot(slotKeys)?.emoji ?? null;
+}
+
+// Epoch, rule revision, slot version and the action key, in one transaction.
+// Membership is checked by the caller immediately before this. Do not call
+// claimReactionExecution from here: it opens its own transaction.
+function claimDestructiveReaction(input, now) {
+  return withImmediateTransaction(() => {
+    if (accountEpoch() !== input.accountEpoch) return "REACTION_STALE";
+    const rule = getReactionRule(input.ruleId);
+    if (!rule || !rule.enabled || rule.revision !== input.revision) return "REACTION_CANCELLED";
+    const latest = latestReactionSlot(input.slotKeys);
+    const expected = input.expectedEmoji;
+    if (!latest || latest.emoji !== expected || latest.timestampMs !== input.timestampMs)
+      return "REACTION_STALE";
+    q("DELETE FROM reaction_executions WHERE expires_at<=?").run(now);
+    q("DELETE FROM reaction_budgets WHERE expires_at<=?").run(now);
+    if (
+      !q("SELECT 1 FROM reaction_events WHERE event_key=? AND expires_at>?").get(
+        input.eventKey,
+        now,
+      )
+    )
+      return "EVENT_MISSING";
+    if (
+      q("SELECT 1 FROM reaction_executions WHERE event_key=? OR rule_key=? OR action_key=?").get(
+        input.eventKey,
+        input.ruleKey,
+        input.actionKey,
+      )
+    )
+      return "DUPLICATE";
+    if (q("SELECT COUNT(*) AS n FROM reaction_executions").get().n >= REACTION_LEDGER_CAP)
+      return "CAPACITY";
+    const admitted = spendReactionBudgets(input.budgets, now);
+    if (admitted !== "ADMITTED") return admitted;
+    q("INSERT INTO reaction_executions VALUES(?,?,?,?)").run(
+      input.eventKey,
+      input.ruleKey,
+      input.actionKey,
+      input.expiresAt,
+    );
+    return "CLAIMED";
+  });
+}
+
 function storeLidPnMapping(lid, pn, deviceIndex = 0) {
+  // Keep the caller's text, including a device suffix. Validation uses the
+  // normalized form so "555:9@lid" still stores as "555:9@lid".
+  if (!acceptableMappingSide(lid, "@lid") || !acceptableMappingSide(pn, "@s.whatsapp.net"))
+    return false;
   q(
     `INSERT INTO lid_mapping (lid, pn, device_index, updated_at) VALUES (?, ?, ?, ?)
      ON CONFLICT(lid) DO UPDATE SET
@@ -973,19 +1084,23 @@ function storeLidPnMapping(lid, pn, deviceIndex = 0) {
   ).run(lid, pn, deviceIndex, Date.now());
   // The pair is an identifier: sanitized debug log only, never combined.log.
   logger.debugOnly.debug({ lid, pn }, "[LID] Stored mapping");
+  return true;
 }
 
 function storeLidPnMappings(mappings) {
   if (!mappings?.length) return;
+  let stored = 0;
   for (const { lid, pn, deviceIndex = 0 } of mappings) {
-    storeLidPnMapping(lid, pn, deviceIndex);
+    if (storeLidPnMapping(lid, pn, deviceIndex)) stored += 1;
   }
-  logger.info(`[LID] Stored ${mappings.length} mappings`);
+  if (stored) logger.info(`[LID] Stored ${stored} mappings`);
 }
 
 function getLidForPn(pn) {
+  if (!acceptableMappingSide(pn, "@s.whatsapp.net")) return null;
   const row = q("SELECT lid FROM lid_mapping WHERE pn = ?").get(pn);
-  return row ? row.lid : null;
+  if (!row || !acceptableMappingSide(row.lid, "@lid")) return null;
+  return row.lid;
 }
 
 // Every LID stored for this phone. Writers persist the pn they are given
@@ -998,6 +1113,11 @@ function getLidsForPn(pn) {
   const consider = (rows) => {
     for (const row of rows) {
       if (!row?.lid || !row?.pn || found.has(row.lid)) continue;
+      if (
+        !acceptableMappingSide(row.lid, "@lid") ||
+        !acceptableMappingSide(row.pn, "@s.whatsapp.net")
+      )
+        continue;
       if (normalizeJid(row.pn) !== pn && row.pn !== pn) continue;
       found.set(row.lid, row.lid);
     }
@@ -1026,8 +1146,10 @@ function getLidsForPns(pns) {
 }
 
 function getPnForLid(lid) {
+  if (!acceptableMappingSide(lid, "@lid")) return null;
   const row = q("SELECT pn FROM lid_mapping WHERE lid = ?").get(lid);
-  return row ? row.pn : null;
+  if (!row || !acceptableMappingSide(row.pn, "@s.whatsapp.net")) return null;
+  return row.pn;
 }
 
 function getAllLidMappings() {
@@ -2706,6 +2828,7 @@ module.exports = {
   reactionRulesForChats,
   verifiedUserRoles,
   claimReactionExecution,
+  claimDestructiveReaction,
   admitReactionAttempt,
   REACTION_LEDGER_CAP,
   // Lifecycle
@@ -2772,6 +2895,9 @@ module.exports = {
   // LID mapping
   storeLidPnMapping,
   storeLidPnMappings,
+  lidMappingsFromUpdate,
+  latestReactionEmoji,
+  latestReactionSlot,
   getLidForPn,
   getLidsForPn,
   getLidsForPns,

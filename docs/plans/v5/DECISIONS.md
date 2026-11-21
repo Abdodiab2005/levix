@@ -439,3 +439,48 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
 - Keep original PR #168 unchanged; create a new Draft PR targeting
   `release/5.0.0-beta.1`. Phase 10 remains the final release gate. No merge,
   version bump, tag or publication is authorized.
+
+## ADR-022: Reaction commands run through the command executor
+
+- Status: ACCEPTED (owner, 2026-11-21, PR-2).
+- Decision (O-1): each rule chooses who may trigger it with the existing senders
+  `{ role, ids }`. Everyone is `any` with no ids. Owner and group admins is the role
+  `owner_group_admin` (`sender.isOwner || sender.isGroupAdmin`). Owner only is `owner`.
+  Group admins only is `group_admin`. Selected participants is `any` with a non-empty
+  ids list. Stored roles `bot_admin` and `member`, and any role plus ids already stored,
+  keep their meaning. There is no second permission system.
+- Decision (O-2): the sender filter is an extra filter. The command's own authorization
+  in the shared executor must also pass. Both, always.
+- Decision (O-3): each rule has `allowOthersOnLinkedMessages`, default false for new
+  rules too. When false, a reaction by anyone other than the linked account on a message
+  authored by the linked account is ignored. The linked account reacting to its own
+  message is governed only by the sender filter.
+- Decision (O-4): a stored v1 rule keeps its sender role and ids exactly. Linked-account
+  reactions are accepted from now on. `allowOthersOnLinkedMessages` is false. Nothing
+  else is widened. The stored row is not rewritten.
+- Decision (O-6): a reaction uses the original command's authorization. It never edits
+  or deletes the reacted-to message.
+- Decision (provenance): the socket assigns the outbound message id before calling
+  Baileys and records that id, with no content, before the send starts. A linked-account
+  reaction or original is accepted only as an inbound server event (`messages.upsert`
+  type `notify`, or `messages.reaction` derived from one), only when its id is not in
+  that set, and only when it is not older than the socket open. A local `append` echo,
+  an id recorded before send, and a restart replay are rejected. An ambiguous identity,
+  including a DM whose PN/LID cannot be resolved, is rejected. This amends ADR-008's
+  self-message rule: hidden, disappearing and unknown originals stay unsupported, and
+  the linked account's own reaction is admitted only with that inbound provenance.
+  `allowOthersOnLinkedMessages` false means other people cannot trigger on those messages.
+- Decision (destructive claim): the claim happens at the kick mutation boundary, after
+  authorization, in one transaction. The guard rechecks the account epoch, that the rule
+  is still enabled at the same revision, that the transition is still the latest version
+  for that slot (timestamp, so remove plus re-add of the same emoji retires the old job),
+  and that the target is still a positive member of the live roster. The key is the
+  account, chat, original id, verified target and command. An existing claim or any failed
+  check removes nobody and is not retried. A typed `!kick` passes no guard.
+- Decision (delivery): the rule destination (`same_chat` or `owner_private`) is passed
+  to the shared router and overrides global command and category route overrides. A
+  destructive announcement stays in the source chat. Dispatcher denials are recorded on
+  the selected rule and send no chat message. A message the command sends after
+  authorization passed stays as it is.
+- Consequences: reaction shortcuts cannot reach a command the reactor could not type,
+  and a phone echo or a restart replay cannot act as the linked account.

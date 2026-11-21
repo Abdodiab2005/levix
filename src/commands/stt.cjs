@@ -15,7 +15,7 @@ const {
 } = require("../utils/providerUrl.cjs");
 const { t } = require("../utils/i18n.cjs");
 const { describeAiError } = require("../services/aiAgent.cjs");
-const { assertAudio, MAX_MEDIA_BYTES } = require("../services/aiMedia.cjs");
+const { assertAudio, assertWhatsAppAudio, MAX_MEDIA_BYTES } = require("../services/aiMedia.cjs");
 
 // Built on first use from whatever key is in force, and
 // rebuilt if that key changes — the operator can paste one without a restart.
@@ -179,12 +179,94 @@ async function transcribe(audioBuffer, mimetype, { signal } = {}) {
   return result;
 }
 
+function reactionCode(code) {
+  const error = new Error(code);
+  error.code = code;
+  throw error;
+}
+
+const REACTION_STT_CONTROL = new Set([
+  "REACTION_VOICE_REQUIRED",
+  "REACTION_STT_DISABLED",
+  "STT_KEY_REQUIRED",
+  "STT_OUTPUT_INVALID",
+  "MEDIA_AUDIO_INVALID",
+  "MEDIA_TOO_LARGE",
+  "MEDIA_NOT_AVAILABLE",
+  "MEDIA_URL_INVALID",
+  "REACTION_STALE",
+  "REACTION_CANCELLED",
+  "REACTION_FORBIDDEN",
+  "REACTION_COMMAND_DENIED",
+  "REACTION_DELIVERY_REFUSED",
+  "REACTION_INACCESSIBLE",
+  "REACTION_IDENTITY_INVALID",
+  "REACTION_TIMEOUT",
+]);
+
+function reactionControl(error) {
+  const code = error?.code || error?.message;
+  return REACTION_STT_CONTROL.has(code);
+}
+
+// A reaction quotes the voice note. The command text is not the audio.
+async function reactToAudio(sock, msg, ctx) {
+  const quoted = unwrapMessage(
+    unwrapMessage(msg.message)?.extendedTextMessage?.contextInfo?.quotedMessage,
+  );
+  const audioMessage = quoted?.audioMessage;
+  assertWhatsAppAudio(audioMessage);
+  if (audioMessage.ptt !== true) reactionCode("REACTION_VOICE_REQUIRED");
+  if (!settings.get("ai_stt_enabled")) reactionCode("REACTION_STT_DISABLED");
+  if (!settings.get(`${resolveSttProvider()}_api_key`)) reactionCode("STT_KEY_REQUIRED");
+  const audioBuffer = await require("../utils/geminiMedia.cjs").downloadMedia(
+    downloadContentFromMessage,
+    audioMessage,
+    "audio",
+    { maxBytes: MAX_MEDIA_BYTES, signal: ctx?.signal },
+  );
+  assertAudio(audioBuffer, audioMessage.mimetype, true);
+  ctx?.signal?.throwIfAborted();
+  if (ctx?.beforeEffect) await ctx.beforeEffect();
+  ctx?.signal?.throwIfAborted();
+  // Checked after beforeEffect: the switch or the key may change during that await.
+  if (!settings.get("ai_stt_enabled")) reactionCode("REACTION_STT_DISABLED");
+  if (!settings.get(`${resolveSttProvider()}_api_key`)) reactionCode("STT_KEY_REQUIRED");
+  let transcription;
+  try {
+    transcription = await module.exports.transcribe(audioBuffer, audioMessage.mimetype, {
+      signal: ctx?.signal,
+    });
+  } catch (error) {
+    if (reactionControl(error)) {
+      if (!error.code && REACTION_STT_CONTROL.has(error.message)) error.code = error.message;
+      throw error;
+    }
+    await sock.sendMessage(
+      msg.key.remoteJid,
+      {
+        text: t("bot.ai.stt.failed", { details: describeAiError(error), hintBlock: "" }),
+      },
+      { quoted: msg },
+    );
+    reactionCode("REACTION_COMMAND_FAILED");
+  }
+  if (typeof transcription !== "string" || !transcription.trim() || transcription.length > 12000)
+    reactionCode("STT_OUTPUT_INVALID");
+  await sock.sendMessage(
+    msg.key.remoteJid,
+    { text: t("bot.ai.stt.transcript", { transcription: transcription.trim() }) },
+    { quoted: msg },
+  );
+}
+
 module.exports = {
   name: "stt",
   aliases: ["totext", "transcribe"],
   chat: "all",
 
-  async execute(sock, msg, args, body, groupMetadata) {
+  async execute(sock, msg, args, body, groupMetadata, ctx) {
+    if (ctx?.source === "reaction") return reactToAudio(sock, msg, ctx);
     const chatId = msg.key.remoteJid;
 
     // Check if message has audio or if it's a reply to an audio message

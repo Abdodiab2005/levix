@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import { makeWASocket } from "@whiskeysockets/baileys";
 import { createRequire } from "module";
 import { invalidateReactionMessage } from "../automation/reactions.js";
@@ -7,6 +8,7 @@ import {
   getMessageFromRecent,
   getRecentCacheEpoch,
   rememberMessage,
+  rememberOutboundId,
 } from "../utils/recentMessageCache.esm.js";
 
 const require = createRequire(import.meta.url);
@@ -18,6 +20,20 @@ const { fetchHttpsBuffer } = require("../utils/httpsFetch.cjs");
 const { getHttpsUrlInfo } = require("../utils/linkPreview.cjs");
 const { t } = require("../utils/i18n.cjs");
 const socketDispatchers = new WeakMap();
+
+// Same shape as Baileys generateMessageIDV2 (3EB0 + 18 hex). Computed here so
+// a test stub that only exports makeWASocket can still load this module.
+function localMessageId(userId) {
+  const data = Buffer.alloc(8 + 20 + 16);
+  data.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 1000)));
+  const user = typeof userId === "string" ? userId.split("@")[0].split(":")[0] : "";
+  if (/^\d+$/.test(user)) {
+    data.write(user, 8);
+    data.write("@c.us", 8 + user.length);
+  }
+  randomBytes(16).copy(data, 28);
+  return `3EB0${createHash("sha256").update(data).digest("hex").toUpperCase().slice(0, 18)}`;
+}
 
 // Never leave a remote media URL for Baileys to fetch again without validation.
 // Local paths, buffers and streams keep their existing send path. Download once
@@ -137,6 +153,13 @@ export function withOutboundSavers(sock) {
     // No await between this check and Baileys: cancellation cannot retract a
     // send already initiated, but must prevent a new one after preparation.
     signal?.throwIfAborted();
+    // Assign the id before relay. rc14 can emit the local echo while
+    // sendMessage is still awaiting, and the content cache is written only
+    // after the promise resolves. A refused delivery guard never reaches here.
+    if (typeof wireOptions.messageId !== "string" || !wireOptions.messageId) {
+      wireOptions.messageId = localMessageId(sock.user?.id);
+    }
+    rememberOutboundId(wireOptions.messageId);
     const result = await original(jid, payload, wireOptions);
     try {
       if (

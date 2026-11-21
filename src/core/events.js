@@ -1,5 +1,6 @@
 import { createRequire } from "module";
 import { createReactionAutomation } from "../automation/engine.js";
+import { executeCommandInvocation } from "../handlers/command.handler.js";
 import {
   handleGroupJoinRequests,
   handleGroupParticipantsUpdate,
@@ -14,6 +15,7 @@ import { cleanOwnerName, updateOwnerDisplayName } from "./connection.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
+const store = require("../db/store.cjs");
 const {
   markRosterChanged,
   mergePartialGroupMetadata,
@@ -37,7 +39,7 @@ export function setupEventListeners(
   sock,
   { saveCreds, onConnectionUpdate, onHandshakeRejected, isLiveSocket } = {},
 ) {
-  const automation = createReactionAutomation(sock);
+  const automation = createReactionAutomation(sock, { dispatch: executeCommandInvocation });
   const reactions = automation.intake;
   // One disposer removes exactly the callbacks this call registered. Baileys
   // also listens on creds.update and lid-mapping.update, so this must not use
@@ -131,16 +133,9 @@ export function setupEventListeners(
 
   // V7: LID mapping updates
   listen(sock.ev, "lid-mapping.update", (updates) => {
-    logger.info(`[LID] Received ${Object.keys(updates).length} LID mapping updates`);
-    const mappings = [];
-    for (const [lid, pn] of Object.entries(updates)) {
-      if (lid && pn) {
-        mappings.push({ lid, pn, deviceIndex: 0 });
-      }
-    }
-    if (mappings.length > 0) {
-      storeLidPnMappings(mappings);
-    }
+    const mappings = store.lidMappingsFromUpdate(updates);
+    logger.info(`[LID] Received ${mappings.length} LID mapping updates`);
+    if (mappings.length > 0) storeLidPnMappings(mappings);
   });
 
   // Group metadata updates. A participants array is a full roster (Baileys

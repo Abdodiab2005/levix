@@ -7,7 +7,9 @@ import { useToast } from "../../components/Toasts";
 import {
   Badge,
   Button,
+  Callout,
   Card,
+  CodeText,
   ConfirmDialog,
   EmptyState,
   FilterButton,
@@ -27,16 +29,22 @@ import {
   usePagination,
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
-import type { ReactionRule } from "../../types";
+import type { ReactionCommandSpec, ReactionRule, ReactionSenderMode } from "../../types";
 import { fill } from "../../utils/fill";
 import {
+  DEFAULT_REACTION_COMMANDS,
   EMPTY_REACTION_FILTERS,
   activeFilterCount,
   createAutomationWriter,
   displayRuleMeta,
+  formatCommandToken,
+  isRawJid,
   reactionApiCode,
+  reactionOutcomeKey,
   readLimits,
+  ruleChatLabel,
   ruleMatchesFilters,
+  shouldShowAutomationOffCallout,
   sortReactionRules,
   statusTone,
   type ReactionFilters,
@@ -101,64 +109,7 @@ function statusCopy(t: TFn, code: string): { label: string; hint: string } {
 }
 
 function outcomeLabel(t: TFn, code: string | null | undefined): string {
-  switch (code) {
-    case "DELIVERED":
-      return t("reactionOutcomeDelivered");
-    case "NO_MATCH":
-      return t("reactionOutcomeNoMatch");
-    case "BUSY":
-      return t("reactionOutcomeBusy");
-    case "ACTION_FAILED":
-      return t("reactionOutcomeActionFailed");
-    case "RATE_LIMIT":
-      return t("reactionOutcomeRateLimit");
-    case "CAPACITY":
-      return t("reactionOutcomeCapacity");
-    case "EVENT_MISSING":
-      return t("reactionOutcomeEventMissing");
-    case "DUPLICATE":
-      return t("reactionOutcomeDuplicate");
-    case "REACTION_CANCELLED":
-      return t("reactionOutcomeReactionCancelled");
-    case "REACTION_TIMEOUT":
-      return t("reactionOutcomeReactionTimeout");
-    case "REACTION_STALE":
-      return t("reactionOutcomeReactionStale");
-    case "REACTION_INACCESSIBLE":
-      return t("reactionOutcomeReactionInaccessible");
-    case "REACTION_FORBIDDEN":
-      return t("reactionOutcomeReactionForbidden");
-    case "REACTION_STT_DISABLED":
-      return t("reactionOutcomeReactionSttDisabled");
-    case "REACTION_DELIVERY_REFUSED":
-      return t("reactionOutcomeReactionDeliveryRefused");
-    case "REACTION_CAPACITY":
-      return t("reactionOutcomeReactionCapacity");
-    case "REACTION_IDENTITY_INVALID":
-      return t("reactionOutcomeReactionIdentityInvalid");
-    case "REACTION_VOICE_REQUIRED":
-      return t("reactionOutcomeReactionVoiceRequired");
-    case "STT_KEY_REQUIRED":
-      return t("reactionOutcomeSttKeyRequired");
-    case "STT_OUTPUT_INVALID":
-      return t("reactionOutcomeSttOutputInvalid");
-    case "MEDIA_AUDIO_INVALID":
-      return t("reactionOutcomeMediaAudioInvalid");
-    case "MEDIA_TOO_LARGE":
-      return t("reactionOutcomeMediaTooLarge");
-    case "MEDIA_NOT_AVAILABLE":
-      return t("reactionOutcomeMediaNotAvailable");
-    case "MEDIA_URL_INVALID":
-      return t("reactionOutcomeMediaUrlInvalid");
-    default:
-      return code ? t("reactionStatusUnknown") : t("reactionNeverRan");
-  }
-}
-
-function actionLabel(t: TFn, action: string): string {
-  if (action === "stt") return t("reactionActionStt");
-  if (action === "ping") return t("reactionActionPing");
-  return "?";
+  return t(reactionOutcomeKey(code));
 }
 
 function destinationLabel(t: TFn, mode: string): string {
@@ -167,18 +118,31 @@ function destinationLabel(t: TFn, mode: string): string {
   return "?";
 }
 
-function roleLabel(t: TFn, role: string): string {
-  if (role === "any") return t("reactionRoleAny");
-  if (role === "owner") return t("reactionRoleOwner");
-  if (role === "bot_admin") return t("reactionRoleBotAdmin");
-  if (role === "group_admin") return t("reactionRoleGroupAdmin");
-  if (role === "member") return t("reactionRoleMember");
-  return "?";
+function senderModeLabel(t: TFn, mode: ReactionSenderMode): string {
+  switch (mode) {
+    case "any":
+      return t("reactionRoleEveryone");
+    case "owner_group_admin":
+      return t("reactionRoleOwnerGroupAdmin");
+    case "owner":
+      return t("reactionRoleOwnerOnly");
+    case "group_admin":
+      return t("reactionRoleGroupAdminOnly");
+    case "selected":
+      return t("reactionRoleSelected");
+    case "custom":
+      return t("reactionRoleCustom");
+  }
 }
 
-function ruleTitle(rule: ReactionRule): string {
+function fallbackChatLabel(t: TFn, chatJid: string): string {
+  return chatJid.endsWith("@g.us") ? t("recipientUnnamedGroup") : t("recipientUnknownContact");
+}
+
+function ruleTitle(t: TFn, rule: ReactionRule, names: ReadonlyMap<string, string>): string {
   const meta = displayRuleMeta(rule);
-  return `${meta.emoji} ${rule.chatName || rule.chatJid}`.trim();
+  const chat = ruleChatLabel(rule, names, fallbackChatLabel(t, rule.chatJid));
+  return `${meta.emoji} ${chat}`.trim();
 }
 
 export const ReactionRulesView: React.FC = () => {
@@ -186,6 +150,9 @@ export const ReactionRulesView: React.FC = () => {
   const t = tKey as TFn;
   const { toast } = useToast();
   const [rules, setRules] = useState<ReactionRule[]>([]);
+  const [commands, setCommands] =
+    useState<readonly ReactionCommandSpec[]>(DEFAULT_REACTION_COMMANDS);
+  const [prefix, setPrefix] = useState("!");
   const [automation, setAutomation] = useState(false);
   const [automationBusy, setAutomationBusy] = useState(false);
   const [connected, setConnected] = useState(true);
@@ -215,6 +182,16 @@ export const ReactionRulesView: React.FC = () => {
   const toastRef = useRef(toast);
   tRef.current = t;
   toastRef.current = toast;
+
+  const rememberRecipient = useCallback((jid: string, label: string) => {
+    if (!jid || !label || isRawJid(label)) return;
+    setNames((prev) => {
+      if (prev.get(jid) === label) return prev;
+      const next = new Map(prev);
+      next.set(jid, label);
+      return next;
+    });
+  }, []);
 
   const applyOverview = useCallback(
     (res: {
@@ -283,6 +260,37 @@ export const ReactionRulesView: React.FC = () => {
       listSeq.current += 1;
     };
   }, [reloadToken, t, toast, applyOverview]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<{ success: boolean; commands?: ReactionCommandSpec[] }>(
+        `/reactions/commands?lang=${encodeURIComponent(language)}`,
+      )
+      .then((res) => {
+        if (cancelled) return;
+        if (Array.isArray(res.commands) && res.commands.length > 0) {
+          setCommands(res.commands);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) toast(failureMessage(t, err, "reactionCommandsLoadFailed"), "error");
+      });
+    api
+      .getCommands()
+      .then((res) => {
+        if (cancelled) return;
+        if (typeof res.prefix === "string" && res.prefix.trim()) {
+          setPrefix(res.prefix.trim());
+        }
+      })
+      .catch(() => {
+        // Default prefix "!" remains active if commands metadata fails.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [language, t, toast]);
 
   useEffect(() => {
     alive.current = true;
@@ -360,7 +368,7 @@ export const ReactionRulesView: React.FC = () => {
         if (cancelled) return;
         const map = new Map<string, string>();
         for (const item of res.recipients) {
-          if (item.name) map.set(item.id, item.name);
+          if (item.name && !isRawJid(item.name)) map.set(item.id, item.name);
         }
         setNames(map);
       })
@@ -371,6 +379,26 @@ export const ReactionRulesView: React.FC = () => {
       cancelled = true;
     };
   }, [t, toast]);
+
+  const filterActionOptions = useMemo(() => {
+    const seen = new Set<string>(["stt", "ping"]);
+    for (const rule of rules) {
+      const meta = displayRuleMeta(rule);
+      if (meta.action) seen.add(meta.action);
+    }
+    return [
+      { value: "any", label: t("reactionStatusAny") },
+      ...[...seen].map((actionKey) => ({
+        value: actionKey,
+        label:
+          actionKey === "stt"
+            ? t("reactionActionStt")
+            : actionKey === "ping"
+              ? t("reactionActionPing")
+              : formatCommandToken(actionKey, prefix),
+      })),
+    ];
+  }, [rules, prefix, t]);
 
   const visible = useMemo(
     () =>
@@ -507,6 +535,12 @@ export const ReactionRulesView: React.FC = () => {
         </Card>
       )}
 
+      {!loading && shouldShowAutomationOffCallout(automation, rules) && (
+        <Callout tone="warn" title={t("reactionAutomationOffCalloutTitle")}>
+          {t("reactionAutomationOffCalloutBody")}
+        </Callout>
+      )}
+
       <div className="flex flex-col gap-3">
         {!loading && !error && rules.length > 0 && (
           <Toolbar>
@@ -543,11 +577,7 @@ export const ReactionRulesView: React.FC = () => {
                 name="rx-action"
                 value={filters.action}
                 onChange={(action) => setFilters((prev) => ({ ...prev, action }))}
-                options={[
-                  { value: "any", label: t("reactionStatusAny") },
-                  { value: "stt", label: t("reactionActionStt") },
-                  { value: "ping", label: t("reactionActionPing") },
-                ]}
+                options={filterActionOptions}
               />
             </FilterButton>
           </Toolbar>
@@ -623,6 +653,8 @@ export const ReactionRulesView: React.FC = () => {
                 const lastCode = rule.runtime?.lastCode ?? null;
                 const lastAt = rule.runtime?.lastAt ?? null;
                 const meta = displayRuleMeta(rule);
+                const commandToken = formatCommandToken(meta.action, prefix);
+                const chatTitle = ruleChatLabel(rule, names, fallbackChatLabel(t, rule.chatJid));
                 const overlaps = Array.isArray(rule.overlaps) ? rule.overlaps : [];
                 return (
                   <Card key={rule.id} className="flex flex-col gap-3">
@@ -631,7 +663,7 @@ export const ReactionRulesView: React.FC = () => {
                         {meta.emoji}
                       </span>
                       <UserText as="strong" className="min-w-0 flex-1 text-sm font-bold">
-                        {rule.chatName || rule.chatJid}
+                        {chatTitle}
                       </UserText>
                       <Toggle
                         checked={rule.enabled}
@@ -660,9 +692,9 @@ export const ReactionRulesView: React.FC = () => {
                     </div>
 
                     <div className="flex flex-wrap gap-1.5">
-                      <Badge>{actionLabel(t, meta.action)}</Badge>
+                      <Badge>{commandToken ? <CodeText>{commandToken}</CodeText> : "?"}</Badge>
                       <Badge>{destinationLabel(t, meta.destination)}</Badge>
-                      <Badge>{roleLabel(t, meta.role)}</Badge>
+                      <Badge>{senderModeLabel(t, meta.senderMode)}</Badge>
                       <Badge>{fill(t("reactionPriorityBadge"), { n: rule.priority })}</Badge>
                     </div>
 
@@ -716,7 +748,10 @@ export const ReactionRulesView: React.FC = () => {
         open={editorOpen}
         rule={editorRule}
         names={names}
+        commands={commands}
+        prefix={prefix}
         ownerLinked={ownerLinked}
+        onRememberRecipient={rememberRecipient}
         onClose={() => setEditorOpen(false)}
         onConflict={() => void handleConflict()}
         onSaved={(rule, edited) => {
@@ -741,7 +776,7 @@ export const ReactionRulesView: React.FC = () => {
         description={
           <span dir="auto">
             {fill(t("reactionDeleteBody"), {
-              name: pendingDelete ? ruleTitle(pendingDelete) : "",
+              name: pendingDelete ? ruleTitle(t, pendingDelete, names) : "",
             })}
           </span>
         }

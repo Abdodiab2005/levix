@@ -22,13 +22,16 @@ interface RecipientPickerProps {
   open: boolean;
   busy?: boolean;
   onClose: () => void;
-  onPick: (jid: string) => void;
+  onPick: (jid: string, item?: Recipient, displayTitle?: string) => void;
   /** Defaults to the sticker "send via WhatsApp" title. */
   title?: string;
   /** Stickers offer groups. Auto-delete passes false and keeps contacts only. */
   includeGroups?: boolean;
-  /** Already chosen ids stay visible and are not offered again. */
+  /** Already chosen ids stay visible and are not offered again unless multiSelect is true. */
   selectedIds?: readonly string[];
+  /** When true, selected items stay clickable so the operator can toggle them off. */
+  multiSelect?: boolean;
+  onToggle?: (jid: string, item?: Recipient, displayTitle?: string) => void;
   emptyText?: string;
 }
 
@@ -70,6 +73,8 @@ export const RecipientPicker: React.FC<RecipientPickerProps> = ({
   title,
   includeGroups = true,
   selectedIds,
+  multiSelect = false,
+  onToggle,
   emptyText,
 }) => {
   const { t, language } = useI18n();
@@ -161,9 +166,15 @@ export const RecipientPicker: React.FC<RecipientPickerProps> = ({
               <Button
                 key={item.id}
                 variant="secondary"
-                disabled={busy || selected}
+                disabled={busy || (selected && !multiSelect)}
                 aria-pressed={selected}
-                onClick={() => onPick(item.id)}
+                onClick={() => {
+                  if (selected && multiSelect && onToggle) {
+                    onToggle(item.id, item, row.title);
+                    return;
+                  }
+                  onPick(item.id, item, row.title);
+                }}
                 className={`h-auto min-h-14 w-full items-center justify-start gap-3 px-3 py-1.5 text-start ${
                   selected ? "border-brand-blue/40 bg-brand-blue/10" : ""
                 }`}
