@@ -204,14 +204,18 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
     }
     return resolveVerifiedSender({ key }, metadata, sock);
   }
-  function sender(job) {
+  function sender(job, { requireOriginalAuthor = true } = {}) {
     available(job);
     const event = job.event;
     const subject = subjectFor(event.actorKey, job.metadata);
     if (subject.isGroup) {
+      // A confirmed kick receipt must not require the removed member. Every
+      // earlier guard still requires the original author to be present.
+      const authorPresent =
+        !requireOriginalAuthor || verifiedParticipant(job.metadata, actorOf(event.original.key));
       if (
         !verifiedParticipant(job.metadata, subject.senderId) ||
-        !verifiedParticipant(job.metadata, actorOf(event.original.key)) ||
+        !authorPresent ||
         ![sock?.user?.id, sock?.user?.lid].some((id) => verifiedParticipant(job.metadata, id))
       )
         fail("REACTION_INACCESSIBLE");
@@ -226,6 +230,11 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
   }
   function authorize(job) {
     const subject = sender(job);
+    if (!senderMatches(job.definition, subject)) fail("REACTION_FORBIDDEN");
+    return subject;
+  }
+  function authorizeReceipt(job) {
+    const subject = sender(job, { requireOriginalAuthor: false });
     if (!senderMatches(job.definition, subject)) fail("REACTION_FORBIDDEN");
     return subject;
   }
@@ -322,8 +331,7 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
     if (group && command.__category !== "group") command.__category = "group";
     return command;
   }
-  function delivery(job) {
-    authorize(job);
+  function plannedRoute(job) {
     const source = job.event.original.key.remoteJid;
     const mode = routeModeFor(job.definition);
     const requester = requesterOf(job.event);
@@ -339,6 +347,10 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
     });
     if (!result.allow || !result.destination) fail("REACTION_DELIVERY_REFUSED");
     return result;
+  }
+  function delivery(job) {
+    authorize(job);
+    return plannedRoute(job);
   }
   function candidatesFor(event) {
     const candidates = [];
@@ -445,6 +457,32 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
           fail("REACTION_DELIVERY_REFUSED");
       },
     };
+    // Posted only after WhatsApp has already removed the member. The requester,
+    // the rule, the account and the destination are checked again. The removed
+    // member does not have to still be in the group.
+    const receiptGuard = {
+      refresh: () => refresh(job),
+      assert: () => {
+        authorizeReceipt(job);
+        const gate = api.evaluateCommandGates(
+          sock,
+          {
+            command,
+            msg: synthetic,
+            isGroup,
+            accountEpoch: job.accountEpoch,
+            options: { routeMode: mode, senderJid: requester.jid, requester },
+          },
+          job.metadata,
+        );
+        if (gate.status === "denied" || gate.status === "disabled") fail("REACTION_COMMAND_DENIED");
+        if (gate.status === "stale") fail("REACTION_STALE");
+        if (gate.status === "failed") fail(gate.reason || "REACTION_DELIVERY_REFUSED");
+        const final = plannedRoute(job);
+        if (final.destination !== planned.destination || final.quote !== planned.quote)
+          fail("REACTION_DELIVERY_REFUSED");
+      },
+    };
     return {
       command,
       invokedName: command.name,
@@ -467,6 +505,7 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
         requester,
         signal: job.controller.signal,
         deliveryGuard: guard,
+        receiptGuard,
         rosterReady: true,
         beforeEffect: async () => {
           await refresh(job);
@@ -534,12 +573,13 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
           timestampMs: event.timestampMs,
           eventKey: event.eventKey,
           ruleKey: hash(event.eventKey, job.rule.id, job.rule.revision),
+          // The stanza id is the operation. A later PN redelivery of the same
+          // id must not open a second claim under the other author form.
           actionKey: hash(
             "destructive",
             accountStamp(),
             event.original.key.remoteJid,
             event.original.key.id,
-            canonical,
             commandKeyOf(job.definition),
           ),
           expiresAt: event.timestampMs + REACTION_LIMITS.ttlMs + REACTION_LIMITS.futureSkewMs,
