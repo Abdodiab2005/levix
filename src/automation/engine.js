@@ -559,7 +559,8 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
   function destructiveGuard(job, canonical, api, invocation) {
     return ({ meta, kickJid, candidates }) => {
       const ids = [canonical, kickJid, ...(candidates || [])].filter(Boolean);
-      if (!ids.some((id) => verifiedParticipant(meta, id))) throw coded("REACTION_STALE");
+      const targetRows = ids.map((id) => verifiedParticipant(meta, id)).filter(Boolean);
+      if (!targetRows.length) throw coded("REACTION_STALE");
       job.metadata = meta;
       try {
         available(job);
@@ -619,7 +620,15 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
       // The remove call is the next statement in kickGroupMember, still in
       // this turn. A later participants update that only removes this target
       // is the effect of that call and must not abort the receipt.
-      if (invocation.command?.name === "kick") job.removal = { ids };
+      if (invocation.command?.name === "kick") {
+        const removalIds = [...ids];
+        for (const row of targetRows) {
+          for (const alias of participantIds(row)) {
+            if (!removalIds.includes(alias)) removalIds.push(alias);
+          }
+        }
+        job.removal = { ids: removalIds };
+      }
     };
   }
   async function execute(job) {
