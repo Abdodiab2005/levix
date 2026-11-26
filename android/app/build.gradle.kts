@@ -240,7 +240,10 @@ android {
         }
         release {
             isMinifyEnabled = true
-            isShrinkResources = true
+            // AGP 8.10.x can produce multiple shrunk resource outputs with ABI splits
+            // when bundling (issue 402800800). Keep DEX optimization enabled;
+            // resource shrinking is independent and can be revisited separately.
+            isShrinkResources = false
             signingConfig = signingConfigs.getByName("levixRelease")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
