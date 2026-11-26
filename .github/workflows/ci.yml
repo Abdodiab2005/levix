@@ -182,6 +182,24 @@ jobs:
       - name: Build Android release APKs and AAB (debug key)
         working-directory: android
         run: ./gradlew :app:assembleRelease :app:bundleRelease --stacktrace
+      - name: Verify R8 release evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapping=android/app/build/outputs/mapping/release/mapping.txt
+          test -s "$mapping"
+          unzip -p android/app/build/outputs/bundle/release/app-release.aab BUNDLE-METADATA/com.android.tools/r8.json > android-r8.json
+          node -e 'JSON.parse(require("node:fs").readFileSync("android-r8.json", "utf8"))'
+          cat android-r8.json
+      - name: Upload R8 release evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-r8-evidence
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            android-r8.json
+            android/app/build/outputs/mapping/release/mapping.txt
       - name: Scan the Android levix-app.zip
         run: node scripts/scan-public-artifacts.mjs android/app/src/main/assets/levix-app.zip
       # Q-16 evidence, produced before choosing whether channel flavors help.
