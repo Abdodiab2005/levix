@@ -239,7 +239,8 @@ android {
             }
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = signingConfigs.getByName("levixRelease")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
